@@ -2195,8 +2195,11 @@ async fn an_edit_observation_names_what_ripwire_resolved_and_nothing_the_host_on
         text.contains("Testes ligados: tests/test_auth.py. "),
         "{text}"
     );
-    assert!(text.contains("riscos: contract_change"), "{text}");
-    assert!(text.contains("limitações: "), "{text}");
+    assert!(text.contains("Riscos: contract_change"), "{text}");
+    assert!(
+        !text.contains("sha256:"),
+        "the hash stays in `sources`: {text}"
+    );
 
     assert!(
         !text.contains("ghost"),
@@ -2216,6 +2219,63 @@ async fn an_edit_observation_names_what_ripwire_resolved_and_nothing_the_host_on
         assert!(!text.contains(never), "{never}: {text}");
     }
     assert!(text.len() <= 2_000);
+}
+
+/// PRD jev-mem §5.2: the agent may leave one sentence on what it changed, kept as a note.
+#[tokio::test]
+async fn a_note_given_at_the_finish_is_kept_and_changes_no_answer() {
+    let (ws, state) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    common::write(ws.path(), "src/auth.py", "changed");
+    let store = Arc::new(Store::new(state.path(), &"w".repeat(64)));
+    let b = with_memory_waiting(ws.path(), store.clone(), std::time::Duration::from_secs(10)).await;
+    let said = "TOKEN_TTL_SECONDS was lowered; validate_token now rejects older tokens.";
+    let finish = |note: Option<&str>| FinishRequest {
+        note: note.map(str::to_string),
+        ..FinishRequest::default()
+    };
+    let plain = Broker::connect(Arc::new(memory_fake()), BrokerConfig::new(ws.path()))
+        .await
+        .unwrap();
+    let without = to_json(
+        &plain
+            .context_before_finish(finish(Some(said)))
+            .await
+            .unwrap(),
+    );
+    assert!(
+        !state.path().join("memory").exists(),
+        "ignored without --memory"
+    );
+
+    let with = to_json(&b.context_before_finish(finish(Some(said))).await.unwrap());
+    assert_eq!(with, without, "the note changes no answer");
+    // Nothing to keep: no write, and nothing counted.
+    b.context_before_finish(finish(Some("  "))).await.unwrap();
+    // Refused whole: counted, never stored, and the answer is the same.
+    let long = "x".repeat(501);
+    let refused = to_json(&b.context_before_finish(finish(Some(&long))).await.unwrap());
+    assert_eq!(refused["status"], with["status"]);
+
+    store.ingest().unwrap();
+    let s = store.load().unwrap();
+    let notes: Vec<&Record> = s
+        .nodes
+        .values()
+        .filter(|r| r.kind == Kind::ExplicitNote)
+        .collect();
+    assert_eq!(notes.len(), 1, "the one note that was said");
+    assert_eq!(notes[0].content, said);
+    assert_eq!(notes[0].sources[0].basis, "host_supplied");
+    assert_eq!(
+        notes[0].sources[0].path, "src/auth.py",
+        "the files that changed"
+    );
+    let counts = to_json(&b.status().await)["memory"].clone();
+    assert_eq!(counts["rejected"], 1, "the note over the limit: {counts}");
+    assert!(
+        !to_json(&b.status().await).to_string().contains(said),
+        "the status never carries the note"
+    );
 }
 
 /// A spool that takes a second per write, and counts the writes that started.

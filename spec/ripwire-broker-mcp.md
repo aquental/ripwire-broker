@@ -757,6 +757,7 @@ indisponível faz a ferramenta falhar ([D-143](changelog.md#d-143--auditoria-de-
 | `budget_tokens` | integer | não | `1800` | Limite da resposta |
 | `include_test_commands` | boolean | não | `true` | Inclui comandos quando conhecidos |
 | `strict` | boolean | não | `false` | Também trata achados menores (`sev=minor`) como bloqueantes |
+| `note` | string (até 500 bytes) | não | ausente | Só com `--memory`: uma ou duas frases do agente sobre o que mudou, guardadas como nota `host_supplied` e enviadas ao provider de memória ([PRD jev-mem §5.2](../docs/jev-mem-prd.md)). Nunca muda a resposta; ignorado sem `--memory` |
 
 #### Operações upstream
 

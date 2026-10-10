@@ -4,9 +4,9 @@
 
 use super::identity;
 use super::model::{
-    Assertion, Kind, MAX_CONTENT_BYTES, MAX_DEPENDENTS, MAX_SYMBOLS, MAX_TESTS,
-    OBSERVATION_POLICY_VERSION, POLICY_VERSION, Record, Rejected, SCHEMA_VERSION, Source,
-    TimestampRole,
+    Assertion, Kind, MAX_CONTENT_BYTES, MAX_DEPENDENTS, MAX_HOST_NOTE_BYTES, MAX_SOURCES,
+    MAX_SYMBOLS, MAX_TESTS, OBSERVATION_POLICY_VERSION, POLICY_VERSION, Record, Rejected,
+    SCHEMA_VERSION, Source, TimestampRole,
 };
 use crate::online::reader::{Ineligible, WorkspaceReader};
 
@@ -70,8 +70,6 @@ pub struct Seen {
     pub tests: Vec<String>,
     /// The `kind` of each risk, repeated as often as it was found; never its message.
     pub risks: Vec<String>,
-    /// The `kind` of each limitation; never its detail.
-    pub limitations: Vec<String>,
 }
 
 /// What the broker saw, structured: the only input of an automatic memory. No prompt,
@@ -135,8 +133,7 @@ pub fn admit(
     let identifiers = named
         .flat_map(|n| n.name.iter().chain([&n.path]))
         .chain(&seen.tests)
-        .chain(&seen.risks)
-        .chain(&seen.limitations);
+        .chain(&seen.risks);
     for text in draft.scope.iter().chain(&draft.evidence).chain(identifiers) {
         if secret_shaped(text) {
             return Err(Refused::SecretShaped);
@@ -222,10 +219,11 @@ fn outcome_code(o: Outcome) -> &'static str {
     }
 }
 
-/// `memory-observation/v2`: event, scope, what the analysis found by name, outcome with its
-/// origin, evidence and source hashes, in this order. An absence is said as unknown or as
-/// none, never as success. A list gives way from its end until the text fits `content`: the
-/// tests first, the symbols last.
+/// `memory-observation/v2`: event, scope, what the analysis found by name, outcome and
+/// evidence, in this order. A list with nothing in it is not written, and neither is the hash
+/// of a source, which `sources` already holds: text that says nothing about the change only
+/// dilutes what does (D-173). An absence is said as unknown, never as success. A list gives
+/// way from its end until the text fits `content`: the tests first, the symbols last.
 fn render(draft: &Draft, sources: &[crate::online::reader::Snapshot]) -> String {
     let seen = &draft.seen;
     let (symbols, dependents) = (unique(&seen.symbols), unique(&seen.dependents));
@@ -236,15 +234,25 @@ fn render(draft: &Draft, sources: &[crate::online::reader::Snapshot]) -> String 
         tests.len().min(MAX_TESTS),
     ];
     loop {
-        let found = format!(
-            "Símbolos: {}. Dependentes: {}. Testes ligados: {}. Achados: {}; {}.",
-            cut(grouped(&symbols[..keep[0]]), symbols.len() - keep[0]),
-            cut(grouped(&dependents[..keep[1]]), dependents.len() - keep[1]),
-            cut(tests[..keep[2]].join(", "), tests.len() - keep[2]),
-            counted(&seen.risks).map_or("nenhum risco".into(), |k| format!("riscos: {k}")),
-            counted(&seen.limitations)
-                .map_or("nenhuma limitação".into(), |k| format!("limitações: {k}")),
-        );
+        let lists = [
+            (
+                "Símbolos",
+                cut(grouped(&symbols[..keep[0]]), symbols.len() - keep[0]),
+            ),
+            (
+                "Dependentes",
+                cut(grouped(&dependents[..keep[1]]), dependents.len() - keep[1]),
+            ),
+            (
+                "Testes ligados",
+                cut(tests[..keep[2]].join(", "), tests.len() - keep[2]),
+            ),
+            ("Riscos", counted(&seen.risks)),
+        ];
+        let found: String = lists
+            .iter()
+            .filter_map(|(name, list)| list.as_ref().map(|l| format!("{name}: {l}. ")))
+            .collect();
         let text = render_with(draft, sources, &found);
         let Some(last) = keep.iter().rposition(|n| *n > 0) else {
             return text;
@@ -269,16 +277,13 @@ fn render_with(draft: &Draft, sources: &[crate::online::reader::Snapshot], found
         Tests::Unknown => "execução de testes desconhecida",
     };
     let scope: Vec<&str> = sources.iter().map(|s| s.path.as_str()).collect();
-    let hashes: Vec<&str> = sources.iter().map(|s| s.content_hash.as_str()).collect();
-    let mut evidence = draft.evidence.join(", ");
-    if !evidence.is_empty() {
-        evidence.push_str("; ");
-    }
+    let evidence = match draft.evidence.is_empty() {
+        true => String::new(),
+        false => format!(" Evidência: {}.", draft.evidence.join(", ")),
+    };
     format!(
-        "Evento: {event}. Escopo: {}. {found} Observado pelo broker: {outcome}; {tests}. \
-         Evidência: {evidence}revisão de fonte {}.",
-        scope.join(", "),
-        hashes.join(", ")
+        "Evento: {event}. Escopo: {}. {found}Resultado: {outcome}; {tests}.{evidence}",
+        scope.join(", ")
     )
 }
 
@@ -317,13 +322,13 @@ fn grouped(list: &[Named]) -> String {
     parts.join("; ")
 }
 
-/// A list and how many of its entries were left out (`+3`); an empty one says so.
-fn cut(shown: String, left_out: usize) -> String {
+/// A list and how many of its entries were left out (`+3`); `None` when it has nothing.
+fn cut(shown: String, left_out: usize) -> Option<String> {
     match (shown.is_empty(), left_out) {
-        (true, 0) => "nenhum".into(),
-        (true, n) => format!("+{n}"),
-        (false, 0) => shown,
-        (false, n) => format!("{shown} +{n}"),
+        (true, 0) => None,
+        (true, n) => Some(format!("+{n}")),
+        (false, 0) => Some(shown),
+        (false, n) => Some(format!("{shown} +{n}")),
     }
 }
 
@@ -403,6 +408,15 @@ pub struct Note {
     pub references: Vec<String>,
 }
 
+/// Who wrote a note. It is part of the record: the two are never mistaken for each other.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Author {
+    /// `memory add`: the operator, by an explicit command.
+    Operator,
+    /// The `note` of `context_before_finish`: the agent, under the consent of `--memory`.
+    Host,
+}
+
 /// The `explicit_note` record for `note`, under the same filters as an observation.
 pub fn admit_note(
     reader: &WorkspaceReader,
@@ -410,7 +424,7 @@ pub fn admit_note(
     note: &Note,
     stamp: Stamp,
 ) -> Result<Record, Refused> {
-    for text in std::iter::once(&note.text).chain(&note.references) {
+    for text in &note.references {
         if secret_shaped(text) {
             return Err(Refused::SecretShaped);
         }
@@ -418,22 +432,68 @@ pub fn admit_note(
             return Err(Refused::PersonalData);
         }
     }
-    if note.text.trim().is_empty() {
-        return Err(Refused::Empty);
-    }
     let mut snapshots = Vec::new();
     for path in &note.references {
         snapshots.push(reader.snapshot(path).map_err(Refused::Ineligible)?);
     }
+    note_record(workspace_id, note, snapshots, stamp, Author::Operator)
+}
+
+/// The record for a note the agent left at the finish (PRD jev-mem §5.2): one sentence or two
+/// on what it changed, refused whole when longer. Its references are the files the analysis
+/// saw change, not the host's words, so one that may not be cited is left out and the note
+/// stays about the rest.
+pub fn admit_host_note(
+    reader: &WorkspaceReader,
+    workspace_id: &str,
+    note: &Note,
+    stamp: Stamp,
+) -> Result<Record, Refused> {
+    if note.text.len() > MAX_HOST_NOTE_BYTES {
+        return Err(Refused::Record(Rejected::ContentTooLong));
+    }
+    let snapshots = note
+        .references
+        .iter()
+        .filter(|path| !secret_shaped(path) && !personal_data(path))
+        .filter_map(|path| reader.snapshot(path).ok())
+        .collect();
+    note_record(workspace_id, note, snapshots, stamp, Author::Host)
+}
+
+/// A note's text is untrusted whoever wrote it: scanned like any other, kept verbatim.
+fn note_record(
+    workspace_id: &str,
+    note: &Note,
+    mut snapshots: Vec<crate::online::reader::Snapshot>,
+    stamp: Stamp,
+    author: Author,
+) -> Result<Record, Refused> {
+    if secret_shaped(&note.text) {
+        return Err(Refused::SecretShaped);
+    }
+    if personal_data(&note.text) {
+        return Err(Refused::PersonalData);
+    }
+    if note.text.trim().is_empty() {
+        return Err(Refused::Empty);
+    }
+    let (event_key, verb, basis) = match author {
+        Author::Operator => ("operator_supplied", "memory_add", "operator_supplied"),
+        Author::Host => ("host_supplied", "context_before_finish", "host_supplied"),
+    };
     snapshots.sort_by(|a, b| a.path.cmp(&b.path));
     snapshots.dedup_by(|a, b| a.path == b.path);
+    if author == Author::Host {
+        snapshots.truncate(MAX_SOURCES);
+    }
     let mut record = Record {
         schema_version: SCHEMA_VERSION,
         policy_version: POLICY_VERSION.into(),
         node_id: String::new(),
         content_hash: String::new(),
         workspace_id: workspace_id.into(),
-        event_key: "operator_supplied".into(),
+        event_key: event_key.into(),
         kind: Kind::ExplicitNote,
         content: note.text.clone(),
         observed_at_ms: stamp.observed_at_ms,
@@ -452,8 +512,8 @@ pub fn admit_note(
                 sha256: s.content_hash.clone(),
                 symbol: None,
                 lines: None,
-                verb: "memory_add".into(),
-                basis: "operator_supplied".into(),
+                verb: verb.into(),
+                basis: basis.into(),
                 ripwire_version: None,
             })
             .collect(),

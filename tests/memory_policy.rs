@@ -233,16 +233,15 @@ fn the_rendering_is_deterministic_and_never_claims_tests_passed() {
     let reader = WorkspaceReader::new(dir.path()).unwrap();
     let ws = "w".repeat(64);
     let r = admission::admit(&reader, &ws, &draft(&["src/cache.rs"]), stamp()).unwrap();
-    let hash = &r.sources[0].sha256;
     assert_eq!(
         r.content,
-        format!(
-            "Evento: análise após edição. Escopo: src/cache.rs. Símbolos: nenhum. Dependentes: \
-             nenhum. Testes ligados: nenhum. Achados: nenhum risco; nenhuma limitação. Observado \
-             pelo broker: análise concluída; execução de testes desconhecida. Evidência: \
-             quality_delta; revisão de fonte {hash}."
-        ),
-        "an analysis that named nothing says so, list by list"
+        "Evento: análise após edição. Escopo: src/cache.rs. Resultado: análise concluída; \
+         execução de testes desconhecida. Evidência: quality_delta.",
+        "an analysis that named nothing has no empty list"
+    );
+    assert!(
+        !r.content.contains(&r.sources[0].sha256),
+        "the hash is in `sources`, not in the text"
     );
     assert_eq!(
         admission::admit(&reader, &ws, &draft(&["src/cache.rs"]), stamp()).unwrap(),
@@ -306,7 +305,6 @@ fn example() -> Draft {
         dependents: vec![],
         tests: vec!["tests/test_auth.py::test_valid".into()],
         risks: vec![],
-        limitations: vec!["counts_floor".into()],
     };
     d
 }
@@ -317,16 +315,12 @@ fn the_v2_rendering_says_what_the_analysis_was_about() {
     let reader = WorkspaceReader::new(dir.path()).unwrap();
     let ws = "w".repeat(64);
     let r = admission::admit(&reader, &ws, &example(), stamp()).unwrap();
-    let hash = &r.sources[0].sha256;
     assert_eq!(
         r.content,
-        format!(
-            "Evento: análise após edição. Escopo: src/auth.py. Símbolos: TOKEN_TTL_SECONDS, \
-             validate_token (src/auth.py). Dependentes: nenhum. Testes ligados: \
-             tests/test_auth.py::test_valid. Achados: nenhum risco; limitações: counts_floor. \
-             Observado pelo broker: análise concluída; execução de testes desconhecida. \
-             Evidência: situational_awareness, edit_check; revisão de fonte {hash}."
-        ),
+        "Evento: análise após edição. Escopo: src/auth.py. Símbolos: TOKEN_TTL_SECONDS, \
+         validate_token (src/auth.py). Testes ligados: tests/test_auth.py::test_valid. \
+         Resultado: análise concluída; execução de testes desconhecida. Evidência: \
+         situational_awareness, edit_check.",
         "the v2 example of PRD jev-mem §5.2, byte for byte"
     );
     assert_eq!(r.policy_version, "memory-policy/v2");
@@ -355,7 +349,6 @@ fn the_v2_rendering_says_what_the_analysis_was_about() {
         "hotspot".into(),
         "contract_change".into(),
     ];
-    d.seen.limitations = vec![];
     let text = admission::admit(&reader, &ws, &d, stamp()).unwrap().content;
     assert!(
         text.contains(
@@ -365,7 +358,7 @@ fn the_v2_rendering_says_what_the_analysis_was_about() {
         "{text}"
     );
     assert!(
-        text.contains("Achados: riscos: contract_change (2), hotspot; nenhuma limitação. "),
+        text.contains(". Riscos: contract_change (2), hotspot. Resultado: "),
         "{text}"
     );
     assert_ne!(
@@ -423,7 +416,10 @@ fn a_list_over_its_cap_is_cut_at_the_end_and_says_how_many_were_left_out() {
         "the symbols are the last to give way: {}",
         r.content
     );
-    assert!(r.content.ends_with(&format!("{}.", r.sources[0].sha256)));
+    assert!(
+        r.content
+            .ends_with("Evidência: situational_awareness, edit_check.")
+    );
 }
 
 #[test]
@@ -472,4 +468,77 @@ fn a_v1_record_is_still_read_as_it_is() {
     let stored = serde_json::to_value(&v1).unwrap();
     assert_eq!(stored["content"], record()["content"], "never re-rendered");
     assert_eq!(stored["policy_version"], "memory-policy/v1");
+}
+
+// ------------------------------------------------- a note the agent leaves (PRD jev-mem §5.2)
+
+use ripwire_broker::memory::admission::Note;
+use ripwire_broker::memory::model::MAX_HOST_NOTE_BYTES;
+
+fn host_note(text: &str, references: &[&str]) -> Note {
+    Note {
+        text: text.into(),
+        references: references.iter().map(|s| s.to_string()).collect(),
+    }
+}
+
+#[test]
+fn a_note_from_the_host_is_an_explicit_note_that_says_where_it_came_from() {
+    let dir = workspace();
+    let reader = WorkspaceReader::new(dir.path()).unwrap();
+    let ws = "w".repeat(64);
+    let text = "TOKEN_TTL_SECONDS was lowered; validate_token now rejects older tokens.";
+    let r = admission::admit_host_note(&reader, &ws, &host_note(text, &["src/auth.py"]), stamp())
+        .unwrap();
+    assert_eq!(r.kind, Kind::ExplicitNote);
+    assert_eq!(
+        r.content, text,
+        "kept as written: data, never an instruction"
+    );
+    assert_eq!(r.event_key, "host_supplied");
+    assert_eq!(r.sources.len(), 1);
+    assert_eq!(r.sources[0].path, "src/auth.py");
+    assert_eq!(
+        r.sources[0].basis, "host_supplied",
+        "never mistaken for the operator's"
+    );
+    assert_eq!(r.sources[0].verb, "context_before_finish");
+    assert_eq!(r.assertion, None, "the broker asserts nothing of it");
+    let operator =
+        admission::admit_note(&reader, &ws, &host_note(text, &["src/auth.py"]), stamp()).unwrap();
+    assert_ne!(
+        r.node_id, operator.node_id,
+        "the origin is part of the node"
+    );
+
+    // A file the note may not cite is left out; the note is still about the rest.
+    let r = admission::admit_host_note(
+        &reader,
+        &ws,
+        &host_note(text, &[".env", "src/auth.py", "gone.rs", "src/auth.py"]),
+        stamp(),
+    )
+    .unwrap();
+    assert_eq!(r.sources.len(), 1, "{:?}", r.sources);
+
+    let admit = |text: &str| {
+        admission::admit_host_note(&reader, &ws, &host_note(text, &["src/auth.py"]), stamp())
+    };
+    assert_eq!(admit("  \n"), Err(Refused::Empty));
+    assert!(
+        admit(&"x".repeat(MAX_HOST_NOTE_BYTES)).is_ok(),
+        "500 bytes fit"
+    );
+    assert_eq!(
+        admit(&"x".repeat(MAX_HOST_NOTE_BYTES + 1)),
+        Err(Refused::Record(Rejected::ContentTooLong)),
+        "refused whole, never cut"
+    );
+    let token = format!("{}{}", "sk-", "a1B2c3D4e5F6g7H8i9J0k1L2");
+    let email = format!("{}@{}", "maria.silva", "example.com");
+    assert_eq!(
+        admit(&format!("the key is {token}")),
+        Err(Refused::SecretShaped)
+    );
+    assert_eq!(admit(&format!("ask {email}")), Err(Refused::PersonalData));
 }

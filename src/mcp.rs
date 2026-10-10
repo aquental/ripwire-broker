@@ -331,6 +331,7 @@ pub fn tools(online: bool) -> Vec<Tool> {
                 "budget_tokens": budget_schema(1800),
                 "include_test_commands": {"type": "boolean", "default": true, "description": "Include run commands when known."},
                 "strict": {"type": "boolean", "default": false, "description": "Also treat minor findings as blocking."},
+                "note": {"type": "string", "maxLength": 500, "description": "With --memory only: one or two sentences on what you changed and why, in plain words (which symbol, which behavior). Kept for later sessions of this workspace and sent to the memory provider. No secrets, keys or personal data. Ignored without --memory."},
             }),
             &[],
         ),
@@ -376,6 +377,7 @@ struct BeforeFinishArgs {
     include_test_commands: bool,
     #[serde(default)]
     strict: bool,
+    note: Option<String>,
 }
 
 fn parse<T: DeserializeOwned>(params: &CallToolRequestParams) -> Result<T, BrokerError> {
@@ -458,6 +460,7 @@ impl BrokerServer {
                 let mut req = FinishRequest {
                     include_test_commands: a.include_test_commands,
                     strict: a.strict,
+                    note: a.note,
                     ..FinishRequest::default()
                 };
                 req.budget_tokens = a.budget_tokens.unwrap_or(req.budget_tokens);

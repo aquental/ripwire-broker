@@ -1,6 +1,6 @@
 # PRD: memória persistente com Jev no ripwire-broker
 
-**Versão:** 0.4 · **Data:** 2026-10-10 · **Status:** proposta revisada, reconciliada com o estudo e com as decisões do mantenedor (D-135); implementada nas Fases 0 a 5 do [plano](../spec/plan/jev-mem-plan.md) (D-136 a D-142, com as correções da auditoria nos D-143 e D-144), **experimental**: o texto enriquecido das observações (§5.2, `memory-observation/v2`, T3.12) está implementado e não passou no aceite (D-172: relevância 0,48 contra a barra de 0,60); faltam rever esse contrato, a validação nos hosts (T3.11), a rodada da avaliação (T5.3) e o fechamento (Fase 6).  
+**Versão:** 0.5 · **Data:** 2026-10-10 · **Status:** proposta revisada, reconciliada com o estudo e com as decisões do mantenedor (D-135); implementada nas Fases 0 a 5 do [plano](../spec/plan/jev-mem-plan.md) (D-136 a D-142, com as correções da auditoria nos D-143 e D-144), **experimental**: o texto enriquecido das observações (§5.2, `memory-observation/v2`, T3.12) está implementado e sozinho não é entregue (D-172); a nota do agente na conclusão (§5.2, T3.13, D-173) é o que a leitura entrega; faltam a validação nos hosts (T3.11), a rodada da avaliação (T5.3) e o fechamento (Fase 6).  
 **Base do broker:** `3b60a1b29252485bc43a3e2b0ee914203dde9211`, pacote `0.1.0`.  
 **Implementação:** Rust; System One remoto Jev `jev-1.13.0`; System Two é o agente do host, com sumarizador local opcional para notas derivadas.
 
@@ -151,7 +151,7 @@ Descoberta e memória compartilham cliente HTTP, autenticação e controle globa
 
 As opções estão na CLI desde a Fase 1 (D-137); incompatibilidades e erros estão documentados e testados em parse, usage, doctor e install. Nenhuma flag ou segredo pode ser ativado por argumento MCP, texto do repositório ou memória. Credencial só em `RIPWIRE_BROKER_JEV_API_KEY`, header Bearer; nunca em URL, argumento, cache ou arquivo gerado pelo instalador.
 
-A extensão amplia o consentimento do §23 do PRD principal: `--memory` autoriza persistência local e envio de observações históricas elegíveis ao Jev, além da descoberta semântica já habilitada implicitamente. Help, doctor e prévia do instalador devem explicitar os dois efeitos, a exigência de credencial e a configuração efetiva. O instalador propaga a opção somente quando solicitada; não precisa acrescentar `--online` redundante. Hooks continuam sem HTTP no próprio processo. Ao sair o processo autorizado, não deixar daemon com credencial; pendências ficam duráveis até o próximo processo autorizado ou `memory drain`. Um hook isolado pode enfileirar, mas não garante enriquecimento imediato. `memory status`, `memory forget`, `memory add` e `memory resume` despacham diretamente para operações locais, sem construir cliente Jev, iniciar discovery ou exigir a feature `online`.
+A extensão amplia o consentimento do §23 do PRD principal: `--memory` autoriza persistência local e envio de observações históricas elegíveis ao Jev, além da descoberta semântica já habilitada implicitamente. Desde a v0.5 autoriza também guardar e enviar a nota que o agente escreve ao concluir (§5.2): é o único texto do host que entra sem um comando do operador, e por isso o `install`, o plugin e o `--help` o nomeiam. Help, doctor e prévia do instalador devem explicitar os dois efeitos, a exigência de credencial e a configuração efetiva. O instalador propaga a opção somente quando solicitada; não precisa acrescentar `--online` redundante. Hooks continuam sem HTTP no próprio processo. Ao sair o processo autorizado, não deixar daemon com credencial; pendências ficam duráveis até o próximo processo autorizado ou `memory drain`. Um hook isolado pode enfileirar, mas não garante enriquecimento imediato. `memory status`, `memory forget`, `memory add` e `memory resume` despacham diretamente para operações locais, sem construir cliente Jev, iniciar discovery ou exigir a feature `online`.
 
 ## 5. Contrato de observação, identidade e tempo
 
@@ -165,7 +165,7 @@ A extensão amplia o consentimento do §23 do PRD principal: `--memory` autoriza
 | `node_id`, `content_hash` | SHA-256 hexadecimal de tuplas versionadas, com comprimento por componente |
 | `workspace_id` | hash de raiz canônica, git-dir da worktree e common-dir; sem Git usar raiz canônica; nunca somente URL remota |
 | `event_key` | hash de host + sessão opaca + evento estável; para MCP usar conteúdo/revisão quando não houver ID durável |
-| `kind` | `edit_observation`, `finish_observation`, `explicit_note`, `derived_note` |
+| `kind` | `edit_observation`, `finish_observation`, `explicit_note` (do operador ou do agente, §5.2), `derived_note` |
 | `content` (`x_t`) | texto UTF-8 canônico, no máximo 2.000 bytes, obtido pelo renderizador abaixo (`memory-observation/v1`, ou `v2` com o texto enriquecido) |
 | `observed_at_ms`, `ingest_seq` | UTC local em milissegundos + sequência monotônica persistida por workspace |
 | `event_time` | opcional: início/fim, precisão e referência de origem; nunca inferido de mtime |
@@ -186,33 +186,59 @@ Limite do registro serializado: 16 KiB; excesso rejeita a entrada inteira com mo
 
 Renderizador determinístico `memory-observation/v1` (o dos registros anteriores à v2), ordem fixa: tipo de evento; ação observada; outcome com sua origem; escopo; referências elegíveis e seus hashes. Exemplo sintético: `Evento: análise após edição. Escopo: src/cache.rs. Observado pelo broker: análise concluída; execução de testes desconhecida. Evidência: quality_delta; revisão de fonte sha256:…`. Ausência de regressão reportada não vira “testes passaram”, “bug corrigido” ou “merge seguro”.
 
-**Texto enriquecido, `memory-observation/v2` (v0.4, D-171; implementado na T3.12, D-172).** O texto da v1 diz que uma análise rodou sobre um arquivo e não diz sobre o quê. Numa sessão real, o Jev deu a duas observações desse tipo relevância 0,20 e 0,16 para uma tarefa sobre o mesmo arquivo, contra a barra de 0,60 do §10; uma nota explícita com o fato, no mesmo store e para a mesma tarefa, teve 0,91 e foi entregue. A leitura estava certa em recusar: o defeito era o conteúdo. A v2 acrescenta ao texto, depois do escopo e na ordem abaixo, o que o envelope da análise já traz:
+**Texto enriquecido, `memory-observation/v2` (v0.4, D-171; implementado na T3.12, D-172; enxugado na v0.5, D-173).** O texto da v1 diz que uma análise rodou sobre um arquivo e não diz sobre o quê. Numa sessão real, o Jev deu a duas observações desse tipo relevância 0,20 e 0,16 para uma tarefa sobre o mesmo arquivo, contra a barra de 0,60 do §10; uma nota explícita com o fato, no mesmo store e para a mesma tarefa, teve 0,91 e foi entregue. A leitura estava certa em recusar: o defeito era o conteúdo. A v2 acrescenta ao texto, depois do escopo e na ordem abaixo, o que o envelope da análise já traz:
 
 | Acréscimo | O que entra | Teto |
 |---|---|---|
 | Símbolos do escopo | nome qualificado e path relativo de cada símbolo que o Ripwire resolveu na análise | 16, os mesmos de `entities` |
 | Dependentes | nome e path dos símbolos que o envelope traz como `caller` ou dependente do que mudou | 8 |
 | Testes ligados | path, e o nome quando houver, dos testes que o envelope aponta | 8 |
-| Achados | o `kind` de cada risco e de cada limitação do envelope, com a contagem | os `kind` enumerados |
+| Riscos | o `kind` de cada risco do envelope, com a contagem | os `kind` enumerados |
 
 Regras da v2:
 
 - **Só o que o Ripwire devolveu.** Um nome que o host passou em `symbols` e o Ripwire não resolveu não entra: texto do host sem confirmação estrutural continua fora.
 - **Nomes, nunca código.** Entram identificadores e paths. Continuam fora a assinatura, o corpo, uma linha de código, o valor antigo ou novo de uma constante, o diff, o texto de `detail` de um risco e o `summary` do envelope.
+- **Só o que diz algo da mudança (v0.5, D-173).** Uma lista vazia não é escrita. O hash da fonte fica em `sources` e sai do texto. As limitações do envelope saem do texto: dizem onde a análise ficou curta, não o que ela achou. O desfecho vira `Resultado: …`, com a execução de testes dita como desconhecida, como antes.
 - **Ordem e corte determinísticos.** Cada lista sai na ordem do envelope; o que passa do teto, ou dos 2.000 bytes de `content`, é cortado no fim da lista, e o texto diz quantos ficaram de fora (`+3`). Cortar uma lista não rejeita o registro; a regra do registro de 16 KiB do §5.1 não muda.
 - **A mesma varredura.** Cada identificador passa pela varredura de segredo e PII; um que falhe rejeita a observação inteira, como hoje.
 - **Sem migração.** Um registro `v1` continua válido, é lido como está e sai pela retenção. `policy_version` passa a `memory-policy/v2` nos registros novos, e o renderizador entra no `content_hash`: a mesma análise renderizada pelas duas versões são dois nós.
 - **Consentimento.** Os nomes de símbolos e de testes passam a ir ao provider nas perguntas de memória. O `install`, o `--help` e o README dizem isso onde hoje descrevem o que `--memory` envia.
 
-Exemplo sintético: `Evento: análise após edição. Escopo: src/auth.py. Símbolos: TOKEN_TTL_SECONDS, validate_token (src/auth.py). Dependentes: nenhum. Testes ligados: tests/test_auth.py::test_valid. Achados: nenhum risco; limitações: counts_floor. Observado pelo broker: análise concluída; execução de testes desconhecida. Evidência: situational_awareness, edit_check; revisão de fonte sha256:…`.
+Exemplo sintético: `Evento: análise após edição. Escopo: src/auth.py. Símbolos: TOKEN_TTL_SECONDS, validate_token (src/auth.py). Testes ligados: tests/test_auth.py::test_valid. Resultado: análise concluída; execução de testes desconhecida. Evidência: situational_awareness, edit_check.`
 
 **O que a v2 não garante.** A nota que passou na medição dizia o valor que mudou, e a v2 continua sem poder dizê-lo. Que os nomes bastem para o Jev aceitar uma observação é hipótese: mede-se repetindo o bloco B do [roteiro](../spec/plan/roteiro-testes-pendentes.md) só com observações automáticas, e o aceite é `kept≥1`. Se não bastar, o que se revê é este contrato, não a barra de entrada do §10.
 
 **Medido (2026-10-10, D-172): não bastou.** No mesmo cenário, a observação de edição com `Símbolos: TOKEN_TTL_SECONDS, validate_token (src/auth.py)` teve relevância 0,48 (era 0,20), e a de conclusão, que não resolve símbolos, 0,22 (era 0,16); `kept=0`. As outras três notas da observação de edição ficaram em 0,85 (informação nova), 0,75 (relação) e 0,54 (suporte). Uma rodada, uma tarefa. Fica em aberto o que este contrato pode dizer a mais sem guardar código, valor ou texto do host.
 
-`context_after_edit` e `context_before_finish` podem produzir observações após o envelope estrutural. Não guardar automaticamente prompt, texto da tarefa, transcript, diff, assinatura ou corpo de arquivo, saída de shell ou resultado gerativo; a v2 não muda nenhum desses. Esses registros descrevem o que foi analisado, não a intenção humana que o broker desconhece.
+**Medido em seguida (D-173): nenhum acréscimo estruturado bastou.** Cinco textos, cada um sozinho num store, lidos para a mesma tarefa; uma rodada por texto:
 
-Notas/preferências entram somente por comando explícito proposto `memory add --workspace PATH --file PATH`: JSON `explicit_note` com texto, referências opcionais e atribuição `operator_supplied`. Conteúdo é dado não confiável; não vira política do host. O arquivo de entrada não pode estar em path proibido; o mesmo filtro de segurança se aplica. Sem captura explícita não inventar preferências a partir de uma edição.
+| Texto | Relevância | Entregue |
+|---|---|---|
+| v2 do D-172 (controle) | 0,34 | não |
+| v2 + estado do contrato (inalterado, parâmetros, chamadores) | 0,39 | não |
+| v2 + qual símbolo mudou | 0,44 | não |
+| v2 + o valor antigo e o novo | 0,56 | não |
+| frase curta, sem valor e sem o molde | 0,56 | não |
+| molde enxuto da v0.5 | 0,32 | não |
+| nota que diz o valor e a regra que o código aplica | 0,91 (D-171) | sim |
+
+O mesmo texto v2 teve 0,48 como observação no D-172 e 0,34 aqui: diferenças abaixo de uns 0,15 não distinguem candidatos. Nem o valor, dentro do molde, cruzou a barra, então abrir o contrato para valores traria o risco de segredo sem destravar a entrega. O molde enxuto não subiu a nota; fica por dizer o mesmo em menos bytes. O que a leitura aceita é um texto que explica o comportamento, e nenhum campo estruturado do Ripwire o produz.
+
+**Nota do agente na conclusão (v0.5, D-173, T3.13).** `context_before_finish` aceita o campo opcional `note`: uma ou duas frases do agente sobre o que mudou e por quê. Com `--memory`, vira um registro `explicit_note`; sem `--memory`, é ignorado.
+
+- **Origem marcada.** `event_key` e `basis` das fontes são `host_supplied`, e o verbo é `context_before_finish`; uma nota do operador (`memory add`) continua `operator_supplied`. A origem entra no `content_hash`: o mesmo texto das duas origens são dois nós.
+- **Limite.** 500 bytes UTF-8. Acima disso a nota é recusada inteira e contada como rejeitada, nunca cortada. Só espaço em branco não é nota.
+- **Mesma varredura.** O texto passa pela varredura de segredo e PII; falhar recusa a nota. O conteúdo é dado não confiável: é guardado como veio, entregue em `memories[]` sob `untrusted_repository_data`, e nunca vira instrução nem política do host.
+- **Referências.** São os arquivos que a análise de conclusão viu mudar, não o que o host disse. Um arquivo que não pode ser citado (inelegível, ou com nome de aspecto sensível) fica fora, e a nota continua valendo para os demais.
+- **Nunca muda a resposta.** A nota é publicada depois do envelope, pelo mesmo caminho e com os mesmos limites de espera do §8; o envelope não a repete e o status não muda. O broker não afirma nada sobre ela (`assertion` ausente).
+- **Só pela tool.** Os hooks não têm nota: quem conclui pelo hook `Stop` grava só a observação.
+
+Medido no cenário do bloco B: a nota teve relevância 0,77 e foi entregue (`kept=1`), com as duas observações automáticas do mesmo store em 0,26 e 0,22.
+
+`context_after_edit` e `context_before_finish` podem produzir observações após o envelope estrutural. Não guardar automaticamente prompt, texto da tarefa, transcript, diff, assinatura ou corpo de arquivo, saída de shell ou resultado gerativo; a v2 não muda nenhum desses. A nota do agente é a exceção consentida e explícita: só entra o que o agente põe no campo `note`, nunca o que o broker poderia inferir da conversa. Esses registros descrevem o que foi analisado, não a intenção humana que o broker desconhece.
+
+Notas/preferências do operador entram por comando explícito `memory add --workspace PATH --file PATH`: JSON `explicit_note` com texto, referências opcionais e atribuição `operator_supplied`. Conteúdo é dado não confiável; não vira política do host. O arquivo de entrada não pode estar em path proibido; o mesmo filtro de segurança se aplica. Sem captura explícita não inventar preferências a partir de uma edição.
 
 Reutilizar regras de elegibilidade do leitor online, bloqueando `.env`, credenciais, binários, arquivos ignorados, escapes de raiz e symlinks inseguros. Acrescentar varredura conservadora para valores secretos e PII identificável, com rejeição integral e razão categorizada. Não prometer detecção perfeita: reduzir a superfície com campos enumerados e nenhum texto arbitrário automático. Os identificadores da v2 não são texto arbitrário: são nomes que o Ripwire leu do código, com teto por lista, e passam pela mesma varredura. Na dúvida, não persistir nem enviar. Contar rejeições sem registrar o conteúdo rejeitado.
 
@@ -465,6 +491,8 @@ Rollback operacional: iniciar sem `--memory`; nenhuma coleta/consulta/inferênci
 - [Perguntas da implementação de referência](https://github.com/libingzheren/Jev-Mem/blob/main/memory/jev_questions.py) e [perfil Jev](https://github.com/libingzheren/Jev-Mem/blob/main/config/jev_mem.json): referências complementares; o broker mantém prompts/política próprios e não importa pipeline Python.
 - [API oficial TypeSafe](https://docs.typesafe.ai/api) e [OpenAPI](https://api.typesafe.ai/openapi.json), consultados em 03/10/2026, contrato de Noul/Choice. Disponibilidade real de Choice no modelo pinado será validada em teste de contrato sintético; não foi chamada API autenticada nesta revisão.
 - Base local: [Cargo.toml](../Cargo.toml), [Cargo.lock](../Cargo.lock), [toolchain](../rust-toolchain.toml), [CI Rust](../.github/workflows/rust.yml), [supply chain](../.github/workflows/supply-chain.yml), [README](../README.md), [PRD principal](../spec/ripwire-broker-mcp.md), [changelog](../spec/changelog.md) e fontes do §13.
+
+**v0.5 (2026-10-10, D-173):** decisão do mantenedor depois de o texto enriquecido não bastar (D-172). O §5.2 ganha a nota do agente na conclusão (`note` de `context_before_finish`, `host_supplied`, 500 bytes) e o molde enxuto da v2 (sem lista vazia, sem hash, sem limitações); o §4 amplia o consentimento de `--memory`. A barra de entrada do §10 não muda.
 
 **v0.4 (2026-10-10, D-171):** o §5.2 ganha o texto enriquecido `memory-observation/v2`, decisão do mantenedor depois de a leitura recusar todas as observações automáticas numa sessão real; o §5.1 registra a versão do renderizador e da política. Nada mais muda.
 

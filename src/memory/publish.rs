@@ -2,7 +2,8 @@
 //! observation goes to the spool. The answer never waits for more than a short, fixed time;
 //! past it the write carries on in the background and is counted as unconfirmed, not durable.
 
-use super::admission::{self, Draft, Event, Named, Outcome, Seen, Stamp, Tests};
+use super::admission::{self, Draft, Event, Named, Note, Outcome, Refused, Seen, Stamp, Tests};
+use super::model::Record;
 use super::store::Spool;
 use super::time::{Clock, SystemClock};
 use crate::model::{Envelope, Role, Status};
@@ -127,44 +128,22 @@ impl Publisher {
         symbols: Vec<Named>,
         event_key: String,
     ) {
-        // Every line ends with how long the answer was held here (PRD jev-mem §8.2).
-        let started = std::time::Instant::now();
-        let say = |what: String| {
-            if let Some(log) = &self.config.debug {
-                let event = match event {
-                    Event::AfterEdit => "after_edit",
-                    Event::BeforeFinish => "before_finish",
-                };
-                let took = super::debug::millis(started.elapsed());
-                log.event("collect", &format!("{event} {what} {took}"));
-            }
+        let label = match event {
+            Event::AfterEdit => "after_edit",
+            Event::BeforeFinish => "before_finish",
         };
         if env.status == Status::Unknown || scope.is_empty() {
-            say(match scope.is_empty() {
-                true => "skipped: nothing in scope".into(),
-                false => "skipped: the analysis was unknown".into(),
-            });
+            self.say(
+                label,
+                std::time::Instant::now(),
+                match scope.is_empty() {
+                    true => "skipped: nothing in scope",
+                    false => "skipped: the analysis was unknown",
+                },
+            );
             return;
         }
-        let Some(reader) = self.reader.clone() else {
-            self.count(|c| c.rejected += 1);
-            say("rejected: the workspace cannot be read".into());
-            return;
-        };
-        // Reserved in one step, so concurrent answers never go past the cap.
-        let max = self.config.max_in_flight;
-        let reserved = self
-            .in_flight
-            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| {
-                (n < max).then_some(n + 1)
-            });
-        if reserved.is_err() {
-            self.count(|c| c.unconfirmed += 1);
-            say(format!("dropped: {max} writes already in flight"));
-            return;
-        }
-        let in_scope = scope.len();
-        let slot = Slot(self.in_flight.clone());
+        let what = format!("scope={}", scope.len());
         let draft = Draft {
             event_key,
             event,
@@ -182,6 +161,69 @@ impl Publisher {
                 .collect(),
             seen: seen(env, symbols),
         };
+        self.publish(label, what, move |reader, workspace_id, stamp| {
+            admission::admit(reader, workspace_id, &draft, stamp)
+        })
+        .await;
+    }
+
+    /// Publishes the sentence the agent left at the finish about `changed` (PRD jev-mem §5.2).
+    /// Nothing but white space is nothing to keep.
+    pub async fn note(&self, text: String, changed: Vec<String>) {
+        if text.trim().is_empty() {
+            return;
+        }
+        let note = Note {
+            text,
+            references: changed,
+        };
+        self.publish(
+            "before_finish",
+            "note".into(),
+            move |reader, workspace_id, stamp| {
+                admission::admit_host_note(reader, workspace_id, &note, stamp)
+            },
+        )
+        .await;
+    }
+
+    /// One line of `--memory-debug-log` (D-164), ending with how long the answer was held
+    /// since `started` (PRD jev-mem §8.2).
+    fn say(&self, label: &str, started: std::time::Instant, what: &str) {
+        if let Some(log) = &self.config.debug {
+            let took = super::debug::millis(started.elapsed());
+            log.event("collect", &format!("{label} {what} {took}"));
+        }
+    }
+
+    /// Admits a record off the answer's thread and waits a short, fixed time for it to be
+    /// durable; past it the write carries on and is counted as unconfirmed.
+    async fn publish(
+        &self,
+        label: &'static str,
+        what: String,
+        admit: impl FnOnce(&WorkspaceReader, &str, Stamp) -> Result<Record, Refused> + Send + 'static,
+    ) {
+        let started = std::time::Instant::now();
+        let say = |said: String| self.say(label, started, &said);
+        let Some(reader) = self.reader.clone() else {
+            self.count(|c| c.rejected += 1);
+            say("rejected: the workspace cannot be read".into());
+            return;
+        };
+        // Reserved in one step, so concurrent answers never go past the cap.
+        let max = self.config.max_in_flight;
+        let reserved = self
+            .in_flight
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| {
+                (n < max).then_some(n + 1)
+            });
+        if reserved.is_err() {
+            self.count(|c| c.unconfirmed += 1);
+            say(format!("dropped: {max} writes already in flight"));
+            return;
+        }
+        let slot = Slot(self.in_flight.clone());
         let stamp = Stamp {
             observed_at_ms: SystemClock.now_ms(),
             ingest_seq: 0,
@@ -194,7 +236,7 @@ impl Publisher {
         let (spool, workspace_id) = (self.config.spool.clone(), self.config.workspace_id.clone());
         let write = tokio::task::spawn_blocking(move || {
             let _slot = slot;
-            let record = admission::admit(&reader, &workspace_id, &draft, stamp)
+            let record = admit(&reader, &workspace_id, stamp)
                 .map_err(|why| format!("refused={}", why.as_str()))?;
             spool
                 .enqueue(&record)
@@ -205,25 +247,22 @@ impl Publisher {
         match tokio::time::timeout(wait, write).await {
             Ok(Ok(Ok(id))) => {
                 self.count(|c| c.confirmed += 1);
-                say(format!(
-                    "scope={in_scope} spooled {}",
-                    super::debug::short(&id)
-                ));
+                say(format!("{what} spooled {}", super::debug::short(&id)));
             }
             Ok(Ok(Err(why))) => {
                 self.count(|c| c.rejected += 1);
-                say(format!("scope={in_scope} {why}"));
+                say(format!("{what} {why}"));
             }
             Ok(Err(_)) => {
                 self.count(|c| c.rejected += 1);
-                say(format!("scope={in_scope} failed: the write panicked"));
+                say(format!("{what} failed: the write panicked"));
             }
             Err(_) => {
                 // Still running: a late write keeps the same node id and is reconciled on
                 // ingestion; it is never counted as durable here.
                 self.count(|c| c.unconfirmed += 1);
                 say(format!(
-                    "scope={in_scope} unconfirmed: still writing after {} ms",
+                    "{what} unconfirmed: still writing after {} ms",
                     wait.as_millis()
                 ));
             }
@@ -235,8 +274,9 @@ impl Publisher {
     }
 }
 
-/// What the answer carries, by name alone: no signature, body, risk message, limitation
-/// detail or summary (PRD jev-mem §5.2).
+/// What the answer carries, by name alone: no signature, body, risk message or summary, and
+/// no limitation, which says how the analysis fell short and not what it found (PRD jev-mem
+/// §5.2).
 fn seen(env: &Envelope, symbols: Vec<Named>) -> Seen {
     Seen {
         symbols,
@@ -251,7 +291,6 @@ fn seen(env: &Envelope, symbols: Vec<Named>) -> Seen {
             .collect(),
         tests: env.tests.iter().map(|t| t.path.clone()).collect(),
         risks: env.risks.iter().map(|r| r.kind.to_string()).collect(),
-        limitations: env.limitations.iter().map(|l| l.kind.to_string()).collect(),
     }
 }
 

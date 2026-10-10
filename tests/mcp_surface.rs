@@ -112,6 +112,19 @@ async fn publishes_three_read_only_tools_and_a_status_resource() {
             "{} schema must be strict: {schema}",
             t.name
         );
+        // Only the finish takes a note, and its schema says the limit and where the text goes.
+        let note = &schema["properties"]["note"];
+        match t.name.as_ref() {
+            "context_before_finish" => {
+                assert_eq!(note["maxLength"], 500, "{note}");
+                let says = note["description"].as_str().unwrap();
+                assert!(
+                    says.contains("--memory") && says.contains("provider"),
+                    "{says}"
+                );
+            }
+            _ => assert!(note.is_null(), "{}", t.name),
+        }
         assert_eq!(
             t.annotations.as_ref().and_then(|a| a.read_only_hint),
             Some(true),
@@ -753,6 +766,58 @@ async fn a_key_in_the_environment_without_online_changes_nothing() {
     assert_eq!(st["offline"], true, "{st}");
     assert!(st.get("online").is_none(), "{st}");
     client.shut_down().await.unwrap();
+}
+
+/// PRD jev-mem §5.2: the `note` of `context_before_finish` reaches the workspace's memory.
+#[cfg(feature = "online")]
+#[tokio::test]
+async fn a_note_given_over_mcp_is_spooled_as_the_hosts() {
+    require_ripwire!();
+    let (repo, state) = (common::sample_repo(), tempfile::tempdir().unwrap());
+    common::write(
+        repo.path(),
+        "src/auth.py",
+        "def login(user, token):\n    return user\n",
+    );
+    // Deterministic selection: the same collection, and no request to the provider.
+    let args = [
+        "--workspace",
+        repo.path().to_str().unwrap(),
+        "--state-dir",
+        state.path().to_str().unwrap(),
+        "--memory",
+        "--memory-selection",
+        "deterministic",
+    ];
+    let args = args.iter().map(|a| a.to_string()).collect();
+    let client =
+        start_broker_with_env(args, &[("RIPWIRE_BROKER_JEV_API_KEY", "tok-e2e-unused")]).await;
+    let said = "login no longer validates the token.";
+    let (is_error, out) = call(&client, "context_before_finish", json!({"note": said})).await;
+    assert!(!is_error, "{out}");
+    assert!(
+        !out.to_string().contains(said),
+        "the note is not echoed: {out}"
+    );
+    client.shut_down().await.unwrap();
+
+    fn files(dir: &Path, out: &mut Vec<String>) {
+        for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+            match entry.path().is_dir() {
+                true => files(&entry.path(), out),
+                false => out.extend(std::fs::read_to_string(entry.path())),
+            }
+        }
+    }
+    let mut stored = Vec::new();
+    files(&state.path().join("memory"), &mut stored);
+    let note = stored
+        .iter()
+        .flat_map(|f| f.lines())
+        .find(|line| line.contains(said))
+        .unwrap_or_else(|| panic!("the note is in the store: {stored:?}"));
+    assert!(note.contains("\"host_supplied\""), "{note}");
+    assert!(note.contains("\"explicit_note\""), "{note}");
 }
 
 /// An `--online` server that never reaches ripwire or the provider, with a key in its

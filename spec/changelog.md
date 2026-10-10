@@ -115,6 +115,7 @@
 | 2026-10-10 13:10 | O SLO do `hook --memory` passa a ser medido pelo próprio hook: cada linha `collect` do `debug.log` termina com a duração, e o hook escreve uma linha `setup`. p95 de 9,5 a 9,9 ms em 16 rodadas (limite 10). A diferença de relógio entre dois hooks inteiros tem p95 de 6 ms com acréscimo zero e não serve para a cauda | [D-170](#d-170--o-slo-do-hook---memory-medido-pelo-próprio-hook) |
 | 2026-10-10 14:10 | A leitura de memória foi reproduzida e diagnosticada: ela funciona, e recusa as observações automáticas porque o texto delas não diz sobre o que a análise foi (0,20 e 0,16 contra 0,60; uma nota explícita teve 0,91). O PRD jev-mem vai à v0.4 e libera o texto enriquecido `memory-observation/v2`; a implementação é a T3.12 | [D-171](#d-171--a-leitura-recusa-as-observações-automáticas-prd-v04) |
 | 2026-10-10 17:50 | T3.12: as observações automáticas passam a dizer, só por nome, o que a análise achou (`memory-observation/v2`, `memory-policy/v2`): símbolos que o Ripwire resolveu, dependentes, testes ligados e o `kind` dos achados. O aceite manual não passou: a relevância da observação de edição foi de 0,20 para 0,48, contra a barra de 0,60 (`kept=0`). A tarefa fica aberta | [D-172](#d-172--t312-o-texto-enriquecido-das-observações-e-o-aceite-que-não-passou) |
+| 2026-10-10 20:40 | A entrega de memória destrava pela nota do agente: `context_before_finish` aceita `note` (até 500 bytes), guardada como nota `host_supplied` com `--memory`; no cenário do roteiro ela teve 0,77 e foi entregue. Cinco acréscimos estruturados ao texto das observações foram medidos e nenhum cruzou a barra. O molde da v2 fica enxuto (sem lista vazia, hash nem limitações). PRD jev-mem v0.5: §5.2 e consentimento | [D-173](#d-173--a-nota-do-agente-na-conclusão-e-o-molde-enxuto-prd-v05) |
 | 2026-10-06 15:52 | A barra mostra o servidor vivo do workspace: `[jev:N]` (requisições ao Jev), com `--memory` `[mem: retr N, stor M]` (leituras e gravações da memória), nos últimos 5 s, e `(online)` no fim; um arquivo por processo `serve`, renovado a cada 10 s e ignorado depois de 30 s | [D-154](#d-154--o-servidor-na-barra-jev-memória-e-online) |
 | 2026-10-06 15:15 | Repositório migrado da organização `CeciApp` para a conta `aquental`: remoto `origin` atualizado, URLs do diagrama de arquitetura trocadas, histórico (D-054, D-055) mantido | [D-153](#d-153--migração-do-repositório-para-aquental) |
 | 2026-10-05 00:30 | Achados baixos da memória, segunda parte, e do eval, em TDD: lease só sai livre e `finish` velho não assenta nada, somas da quota saturam, `memory retry` alcança jobs adiados, ingest perto do teto toma o que cabe, pânico do worker dito (grupo 3); guarda de shell que vê opções, palavras-chave, `-lc`, `xargs` e `find -exec`, `{repo}`/`{fix}` como uma palavra, `spent` só em braço com memória, ids de tarefa recusados, CLI do `ripwire-eval`, `history_incomplete` fora das médias, sessão cortada pela API inválida e prompt longo que segurava o timeout (grupo 3) | [D-151](#d-151--achados-baixos-da-memória-segunda-parte-e-do-eval) |
@@ -7940,3 +7941,99 @@ mortas; a que sobrevive (todo item como dependente) é equivalente hoje, porque 
 item do envelope já é `caller`. Portões: 845 (5 ignorados) e 882 (8 ignorados), fmt e os dois
 clippy limpos. SLO do `hook --memory` medido de novo, 5 rodadas de 200 hooks em release: p50 7,8
 a 8,2 ms, p95 9,6 a 9,8 ms, p99 10,0 ms, máximo até 15,7 ms; continua dentro de 10 e 25 ms.
+
+## D-173 — A nota do agente na conclusão e o molde enxuto; PRD v0.5
+
+**Decisão do mantenedor**, depois do D-172: destravar a entrega por uma nota escrita pelo agente
+e enxugar o texto das observações. O PRD jev-mem vai à v0.5 (§5.2 e o consentimento do §4). A
+barra de entrada do §10 não muda.
+
+**O que foi medido antes de decidir.** Cinco textos candidatos para a observação de edição do
+bloco B, cada um sozinho num store próprio (entrou por `memory add`, foi enriquecido por
+`memory drain --online` e lido por `context_for_task`), para a tarefa "Add a test that a token
+older than the TTL is rejected (src/auth.py token TTL validation)", Jev `jev-1.13.0`. Uma rodada
+por texto:
+
+| Texto candidato | Relevância | Entregue |
+|---|---|---|
+| v2 do D-172 (controle) | 0,34 | não |
+| v2 + estado do contrato (`validate_token inalterado`, parâmetros, chamadores) | 0,39 | não |
+| v2 + qual símbolo mudou (`Mudou nesta edição: TOKEN_TTL_SECONDS`) | 0,44 | não |
+| v2 + o valor (`de 3600 para 900`) | 0,56 | não |
+| Frase curta, sem valor e sem o resto do molde | 0,56 | não |
+| Nota do D-171 (o valor e a regra que `validate_token` aplica) | 0,91 no D-171 | sim |
+
+Três leituras:
+
+- **O ruído é grande.** O mesmo texto v2 teve 0,48 como observação no D-172 (store com duas
+  observações) e 0,34 aqui (sozinho, como nota). Diferenças abaixo de uns 0,15 não distinguem
+  candidatos.
+- **Nem o valor basta dentro do molde.** Abrir o §5.2 para valores traria risco de segredo e não
+  destravaria.
+- **O que passou explica o comportamento** ("rejeita o token quando…"). Nenhum campo estruturado
+  do Ripwire produz esse texto; quem o tem é o agente que fez a mudança.
+
+**1. A nota do agente (T3.13).** `context_before_finish` ganha o campo opcional `note`.
+
+- Com `--memory`, vira um registro `explicit_note` com `event_key` e `basis` `host_supplied` e
+  verbo `context_before_finish`; a do operador (`memory add`) continua `operator_supplied`, e as
+  duas são nós diferentes para o mesmo texto. Sem `--memory`, a nota é ignorada.
+- Até 500 bytes; acima disso é recusada inteira e contada em `rejected`. Só espaço em branco não
+  grava nem conta.
+- O texto passa pela varredura de segredo e PII. As referências são os arquivos que a análise viu
+  mudar; um que não pode ser citado fica fora, sem recusar a nota.
+- Nunca muda a resposta: é publicada depois do envelope, pelo mesmo caminho da observação (espera
+  de 25 ms, teto de escritas em voo), e o envelope não a repete.
+- Os hooks não têm nota. O `debug.log` ganha a linha `collect before_finish note spooled …`.
+- A skill do Claude Code e o `AGENTS.md` do Codex pedem a nota ao concluir; a descrição do campo
+  no schema diz o limite, o destino e que não leva segredo.
+- **Consentimento:** `--memory` passa a guardar e enviar texto do host sem um comando do operador.
+  O `install`, o plugin e o `--help` dizem isso; o PRD §4 registra a ampliação.
+
+**2. O molde enxuto da `memory-observation/v2`.** Uma lista vazia não é escrita; o hash da fonte
+sai do texto (continua em `sources`); as limitações saem do texto; o desfecho vira `Resultado: …`.
+Exemplo: `Evento: análise após edição. Escopo: src/auth.py. Símbolos: TOKEN_TTL_SECONDS,
+validate_token (src/auth.py). Dependentes: test_valid (tests/test_auth.py). Testes ligados:
+tests/test_auth.py. Riscos: hotspot. Resultado: análise concluída; execução de testes
+desconhecida. Evidência: situational_awareness, edit_check.` O nome da versão não muda: a v2 do
+D-172 nunca chegou ao `master` numa versão publicada, e os registros dela só existiram nos stores
+de teste desta medição.
+
+**O molde enxuto não subiu a nota.** Medido como os candidatos acima: 0,32, contra 0,34 do
+controle. A previsão de que enxugar ajudaria estava errada; a mudança fica por dizer o mesmo em
+menos bytes, não por relevância.
+
+**Aceite (bloco B do roteiro, com a nota): passou.** A primeira sessão chamou
+`context_after_edit` e `context_before_finish` com a nota do D-171; a segunda leu:
+
+| Memória no store | Relevância | Entregue |
+|---|---|---|
+| nota do agente (`host_supplied`) | 0,77 | sim (`score` 0,83) |
+| observação de edição (molde enxuto) | 0,26 | não |
+| observação de conclusão (molde enxuto) | 0,22 | não |
+
+`read … kept=1 visited=3 requests=2 stop=request_limit`. Uma rodada, por script que chama as
+tools por MCP; **não mostra que um agente real escreve a nota**. Isso é o bloco C do roteiro
+(T3.11), que agora valida duas coisas por host: que o agente escreve a nota e que usa a memória.
+
+**Onde.** `src/memory/admission.rs` (`admit_host_note`; `admit_note` e ela compartilham
+`note_record`; renderizador), `src/memory/publish.rs` (`Publisher::note`; `observe` e `note`
+compartilham `publish`), `src/memory/model.rs` (`MAX_HOST_NOTE_BYTES`), `src/broker.rs`
+(`FinishRequest.note`), `src/mcp.rs` (schema e argumento), `src/install.rs`, `src/cli.rs` e
+`integrations/claude-code/.claude-plugin/plugin.json` (consentimento).
+
+**Limites.**
+
+- A nota é o que o agente disser. O broker não confere se ela é verdadeira; por isso ela chega à
+  sessão seguinte como dado não confiável, com a origem marcada.
+- A varredura de segredo é a mesma, por palavra-chave e prefixo: não promete pegar todo segredo
+  que um agente possa escrever.
+- Quem conclui só pelo hook `Stop` não deixa nota.
+
+**Verificação.** Vermelho: `cannot find function admit_host_note`, `struct FinishRequest has no
+field named note`, `missing field limitations in initializer of Seen`. Mutação: 10 de 11 mortas
+de início; a que sobreviveu (`note` descartado no MCP) mostrou que nenhum teste passava a nota
+pela tool, e `tests/mcp_surface.rs::a_note_given_over_mcp_is_spooled_as_the_hosts` a mata.
+Portões: 847 (5 ignorados) e 885 (8 ignorados), fmt e os dois clippy limpos. SLO do `hook --memory`, 5 rodadas de
+200 hooks em release: p50 7,9 a 8,2 ms, p95 9,4 a 9,9 ms, p99 9,9 a 11,5 ms, máximo até 15,2 ms; dentro
+de 10 e 25 ms, com a mesma folga curta no p95 de antes.

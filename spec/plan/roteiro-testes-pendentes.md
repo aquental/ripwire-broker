@@ -125,8 +125,14 @@ stop=empty`. A observação de edição, agora com `Símbolos: TOKEN_TTL_SECONDS
 (src/auth.py)`, teve relevância 0,48 (era 0,20); a de conclusão, 0,22 (era 0,16). A barra é 0,60.
 Rodado sem sessão do Claude Code: um script chamou `context_after_edit` (com os dois símbolos) e
 `context_before_finish` por MCP num `serve --online --memory`, esperou o enriquecimento, e outro
-processo chamou `context_for_task` com a tarefa deste bloco. O C continua bloqueado para
-observações automáticas.
+processo chamou `context_for_task` com a tarefa deste bloco.
+
+**Rodado com a nota do agente ([D-173](../changelog.md#d-173--a-nota-do-agente-na-conclusão-e-o-molde-enxuto-prd-v05)): passou.** A primeira sessão chamou
+`context_before_finish` com `note` ("In src/auth.py, TOKEN_TTL_SECONDS was lowered from 3600 to
+900 seconds; validate_token rejects a token when now - issued_at is not below
+TOKEN_TTL_SECONDS."); a segunda leu `kept=1 visited=3 requests=2`, com a nota em `memories[]`
+(relevância 0,77) e as duas observações automáticas recusadas (0,26 e 0,22). Também por script,
+sem sessão do Claude Code: falta ver um agente real escrever a nota, que é o bloco C.
 
 Achado do D-168: num Claude Code real, a memória é coletada, ingerida e enriquecida, mas a leitura
 visita as memórias, pergunta ao Jev e não mantém nenhuma (`kept=0`, `stop=empty`). Enquanto isso
@@ -181,8 +187,13 @@ grep ' read ' "$LOG" | tail -2
 
 ## C · T3.11: os hosts usam a memória
 
-Usa o mesmo repositório do B. Nenhuma observação automática é entregue, nem com a T3.12
-(D-172): semeie com uma nota explícita antes da sessão que lê, e registre que foi assim.
+Usa o mesmo repositório do B. A memória entregue é a nota que o agente escreve em
+`context_before_finish` (D-173); as observações automáticas sozinhas não são entregues (D-172).
+Há duas coisas a validar por host, e a primeira é nova: **o agente escreve a nota** (procure
+`"note"` na chamada de `context_before_finish` da primeira sessão, e a linha
+`collect before_finish note spooled …` no `debug.log`), e **o agente usa a memória** na segunda
+sessão. Se o agente não escrever a nota, registre isso como o resultado e semeie à mão para
+validar o resto:
 
 ```sh
 echo '{"text": "In src/auth.py, TOKEN_TTL_SECONDS was lowered from 3600 to 900 seconds."}' > ../note.json
