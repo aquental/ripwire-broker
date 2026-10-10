@@ -44,6 +44,10 @@ After changing a signature, a shared function, or several files:
 - `attention_required`: resolve or explicitly justify each `risk` (quality regression, broken contract, missing co-change).
 - `unknown`: evidence is missing. Say so to the user; don't claim the change is safe.
 - `ready` means only that no open obligation was detected. It **does not** mean the code is correct. Still run the tests in `tests`.
+- If you changed code, pass `note`: one or two sentences (at most 500 bytes) on what changed and why, naming the
+  symbol and the behavior ("`validate_token` now rejects a token older than `TOKEN_TTL_SECONDS`"). When the server
+  runs with `--memory` it is kept for later sessions of this workspace and sent to the memory provider; otherwise
+  it is ignored. Never put a secret, a key or personal data in it.
 
 ## Items you already received
 

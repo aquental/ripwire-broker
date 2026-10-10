@@ -12,6 +12,8 @@ Follow this cycle:
    `files` and `symbols`. Handle `contract_change` and `cochange_missing` in `risks`.
 3. **Before declaring done**, call `context_before_finish`. `attention_required` → resolve or justify each risk;
    `unknown` → tell the user evidence is missing; `ready` does not mean correct: run the tests in `tests`.
+   If you changed code, pass `note`: one or two sentences (at most 500 bytes) on what changed and why. With
+   `--memory` it is kept for later sessions and sent to the memory provider; never put a secret in it.
 
 An item marked "already delivered in this session" is an unchanged reference without `content`; call again with
 `include_seen: true` if you no longer have the earlier context.

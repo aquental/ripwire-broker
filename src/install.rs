@@ -381,7 +381,8 @@ pub const MEMORY_CONSENT: &str =
     "Além do que o modo online envia, guarda localmente observações
 deste workspace entre sessões (no state dir, fora do repositório)
 e envia as elegíveis ao provider Jev para classificá-las e relacioná-las. Uma observação leva
-nomes de símbolos e de testes e paths; nunca assinatura, corpo, valor ou diff. Os hooks só gravam localmente; nunca fazem HTTP.
+nomes de símbolos e de testes e paths; nunca assinatura, corpo, valor ou diff. Também guarda e envia
+a nota que o agente escreve ao concluir (campo `note` de context_before_finish, até 500 bytes). Os hooks só gravam localmente; nunca fazem HTTP.
 Selecione somente uma raiz cujo conteúdo você tem autorização para enviar.";
 
 /// Where the key comes from with `install`; the plugin has its own option for it.

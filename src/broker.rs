@@ -308,6 +308,9 @@ pub struct FinishRequest {
     pub include_test_commands: bool,
     /// Also treat minor findings as blocking.
     pub strict: bool,
+    /// One sentence on what changed, kept as a memory with `--memory` and ignored without
+    /// it (PRD jev-mem §5.2). It never changes the answer.
+    pub note: Option<String>,
 }
 
 impl Default for FinishRequest {
@@ -316,6 +319,7 @@ impl Default for FinishRequest {
             budget_tokens: 1800,
             include_test_commands: true,
             strict: false,
+            note: None,
         }
     }
 }
@@ -940,8 +944,11 @@ impl Broker {
             entries,
         );
         self.remember(&env);
-        self.observe(MemoryEvent::BeforeFinish, &env, changed, vec![])
+        self.observe(MemoryEvent::BeforeFinish, &env, changed.clone(), vec![])
             .await;
+        if let (Some(memory), Some(note)) = (&self.memory, req.note) {
+            memory.note(note, changed).await;
+        }
         Ok(env)
     }
 

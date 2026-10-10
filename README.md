@@ -156,7 +156,7 @@ come from an environment variable ([PRD §7.3](spec/ripwire-broker-mcp.md#73-tra
 | --- | --- | --- |
 | `context_for_task` | before exploring (`task`, `mode`, `include_docs`, `include_bodies`) | 2500 |
 | `context_after_edit` | after a relevant edit (`files`, `symbols`) | 1500 |
-| `context_before_finish` | before declaring done (`strict`, `include_test_commands`) | 1800 |
+| `context_before_finish` | before declaring done (`strict`, `include_test_commands`, and `note` with `--memory`) | 1800 |
 
 The resource `ripwire-broker://status` carries versions, upstream availability, restarts,
 default budgets and local metrics. It never includes prompts, code, symbols or responses.
@@ -387,20 +387,20 @@ improves correctness.
 `--memory` keeps observations of the workspace between sessions
 ([PRD](docs/jev-mem-prd.md), [plan](spec/plan/jev-mem-plan.md)). Phases 0 to 5 are built: collection,
 enrichment, consolidation, reading in `context_for_task`, and the evaluation arms. It stays
-experimental until an automatic observation is worth reading (below), it is
+experimental until the hosts are shown to write and use the note (below), it is
 validated in real hosts (T3.11) and measured (T5.3).
 
 **What an automatic memory holds:** which analysis ran (after an edit, before finishing), its
 outcome as the broker saw it, the files in scope with the SHA-256 of their bytes, and the names
 of the analyses. It also holds, by name alone, what the analysis found
 (`memory-observation/v2`): the symbols in scope that ripwire resolved, the callers and dependents
-the answer carries, the tests it points to, and the kind of each risk and limitation with its
-count. For example `Evento: análise após edição. Escopo: src/auth.py. Símbolos:
+the answer carries, the tests it points to, and the kind of each risk with its count. For example `Evento: análise após edição. Escopo: src/auth.py. Símbolos:
 TOKEN_TTL_SECONDS, validate_token (src/auth.py). Dependentes: test_valid (tests/test_auth.py).
-Testes ligados: tests/test_auth.py. Achados: riscos: hotspot; limitações: counts_floor. Observado
-pelo broker: análise concluída; execução de testes desconhecida. …`. It never holds a signature,
-a body, a value, a diff, the message of a risk, the detail of a limitation, the answer's summary
-or the task's text, and a symbol the host named that ripwire did not resolve stays out. At most 16
+Testes ligados: tests/test_auth.py. Riscos: hotspot. Resultado: análise concluída; execução de
+testes desconhecida. Evidência: situational_awareness, edit_check.` A list with nothing in it is
+not written. It never holds a signature,
+a body, a value, a diff, the message of a risk, a limitation, the answer's summary or the
+task's text, and a symbol the host named that ripwire did not resolve stays out. At most 16
 symbols, 8 dependents and 8 tests are named; a longer list is cut at its end and says how many
 were left out (`+3`). These names are sent to the provider with the memory questions. Every one
 of them goes through the same secret and personal-data scan as a path, and one that fails
@@ -409,16 +409,24 @@ broker never runs the tests, so it never records that they passed, that a bug wa
 a merge is safe. A record written before this text (`memory-policy/v1`) is read as it is and
 leaves by retention.
 
-**Today no automatic memory reaches an answer.** In a real session the read visited the two
-observations of an earlier edit and kept neither: Jev scored them 0.20 and 0.16 against a bar of
-0.60, because the text says an analysis ran on a file and not what it was about. A note added
-with `memory add`, in the same store and for the same task, scored 0.91 and was delivered
-([D-171](spec/changelog.md#d-171--a-leitura-recusa-as-observações-automáticas-prd-v04)). The
-richer text above was built for this, and it was not enough: in the same scenario the edit
-observation that now names its symbols scored 0.48, and the finish observation 0.22, so the read
-again kept neither ([D-172](spec/changelog.md#d-172--t312-o-texto-enriquecido-das-observações-e-o-aceite-que-não-passou)). One run,
-on one task. An observation says what was analysed, not what changed, and the task needed the
-latter.
+**The note the agent leaves:** `context_before_finish` takes an optional `note`, one or two
+sentences on what changed and why. With `--memory` it is kept as an explicit note marked
+`host_supplied`, about the files the finish analysis saw change, and it is sent to the provider
+like any other memory; without `--memory` it is ignored. At most 500 bytes: a longer one is
+refused whole, as is one that looks like a secret or personal data. It never changes the answer,
+and it reaches a later session as untrusted data, never as an instruction. The hooks have no
+note. This is the only text of the host that `--memory` keeps without a command of yours, and
+`install` says so before writing anything.
+
+**Why the note exists: an automatic observation alone does not reach an answer.** Jev asks
+whether a memory holds a fact the task needs. An observation says what was analysed, not what
+changed: in a real scenario the two of an earlier edit scored 0.20 and 0.16 against a bar of
+0.60 ([D-171](spec/changelog.md#d-171--a-leitura-recusa-as-observações-automáticas-prd-v04)),
+0.48 and 0.22 once they named their symbols
+([D-172](spec/changelog.md#d-172--t312-o-texto-enriquecido-das-observações-e-o-aceite-que-não-passou)),
+and no structured addition tried after that crossed the bar, not even the old and new value
+([D-173](spec/changelog.md#d-173--a-nota-do-agente-na-conclusão-e-o-molde-enxuto-prd-v05)). A note
+saying what changed scored 0.77 in the same store and was delivered. One run each, on one task.
 
 **When it is collected:** after `context_after_edit` and `context_before_finish` build their
 answer, never before and never changing it; `context_for_task` collects nothing, and an answer

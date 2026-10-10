@@ -4841,6 +4841,10 @@ fn install_with_memory_writes_the_flag_and_never_the_key() {
             text.contains("nomes de símbolos e de testes"),
             "names what an observation carries: {text}"
         );
+        assert!(
+            text.contains("a nota que o agente escreve ao concluir"),
+            "names the text the agent writes: {text}"
+        );
     }
     assert!(
         preview.contains("envia as elegíveis ao provider Jev"),

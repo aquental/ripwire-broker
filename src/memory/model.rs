@@ -12,6 +12,9 @@ pub const OBSERVATION_POLICY_VERSION: &str = "memory-policy/v2";
 pub const MAX_SYMBOLS: usize = 16;
 pub const MAX_DEPENDENTS: usize = 8;
 pub const MAX_TESTS: usize = 8;
+/// A note the agent leaves at the finish, in UTF-8 bytes: a sentence or two, refused whole
+/// when longer (PRD jev-mem §5.2).
+pub const MAX_HOST_NOTE_BYTES: usize = 500;
 /// `x_t`, the canonical content, in UTF-8 bytes.
 pub const MAX_CONTENT_BYTES: usize = 2_000;
 pub const MAX_ENTITIES: usize = 16;

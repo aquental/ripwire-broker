@@ -49,6 +49,7 @@ usage: ripwire-broker [serve] --workspace DIR [--ripwire BIN] [--timeout-ms N] [
 Selecione somente uma raiz cujo conteúdo você tem autorização para enviar.
 --memory: implica --online; guarda observações do workspace localmente e envia as elegíveis ao Jev.
   Uma observação leva nomes de símbolos e de testes e paths; nunca assinatura, corpo, valor ou diff.
+  Também guarda e envia a nota que o agente escreve ao concluir (`note` de context_before_finish, até 500 bytes).
 --memory-selection deterministic: experimental, para avaliação; a mesma coleta, sem enriquecer nem perguntar ao Jev sobre memória.
 --jev-provider cloudflare: o Clef da Cloudflare (Workers AI) no lugar do Jev; precisa de --jev-account-id,
 e --jev-model é clef-flash (padrão) ou clef.
