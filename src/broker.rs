@@ -1,7 +1,7 @@
 //! The broker core: routes a request to ripwire verbs, normalizes, and shapes the envelope.
 
 use crate::budget;
-use crate::memory::admission::Event as MemoryEvent;
+use crate::memory::admission::{Event as MemoryEvent, Named};
 use crate::memory::publish::{MemoryConfig, MemoryStatus, Publisher};
 use crate::memory::recall::{Recall, Recalled};
 use crate::memory::retrieve;
@@ -647,11 +647,17 @@ impl Broker {
 
     /// With `--memory`, publishes what this answer observed, after it is built and without
     /// changing it (PRD jev-mem §8.1).
-    async fn observe(&self, event: MemoryEvent, env: &Envelope, scope: Vec<String>) {
+    async fn observe(
+        &self,
+        event: MemoryEvent,
+        env: &Envelope,
+        scope: Vec<String>,
+        symbols: Vec<Named>,
+    ) {
         if let Some(memory) = &self.memory {
             let id = REQUEST.try_with(|r| r.id).unwrap_or(0);
             memory
-                .observe(event, env, scope, format!("mcp/{}/{id}", env.tool))
+                .observe(event, env, scope, symbols, format!("mcp/{}/{id}", env.tool))
                 .await;
         }
     }
@@ -728,10 +734,13 @@ impl Broker {
         }))
         .await;
         let mut impact_needed = Vec::new();
+        // What the observation may name: the symbols ripwire resolved, not the ones asked.
+        let mut resolved = Vec::new();
         for (symbol, answer) in symbols.iter().zip(checks) {
             match answer? {
                 Ok(payload) => {
-                    let (found, changed) = normalize::edit_check(&payload);
+                    let (found, changed, named) = normalize::edit_check(&payload);
+                    resolved.extend(named.map(|(name, path)| Named::symbol(&name, &path)));
                     entries.extend(found);
                     if changed {
                         impact_needed.push(*symbol);
@@ -777,7 +786,8 @@ impl Broker {
             entries,
         );
         self.remember(&env);
-        self.observe(MemoryEvent::AfterEdit, &env, scope).await;
+        self.observe(MemoryEvent::AfterEdit, &env, scope, resolved)
+            .await;
         Ok(env)
     }
 
@@ -930,7 +940,8 @@ impl Broker {
             entries,
         );
         self.remember(&env);
-        self.observe(MemoryEvent::BeforeFinish, &env, changed).await;
+        self.observe(MemoryEvent::BeforeFinish, &env, changed, vec![])
+            .await;
         Ok(env)
     }
 

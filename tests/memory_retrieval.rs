@@ -1034,6 +1034,7 @@ fn observed(root: &std::path::Path, ws: &str, path: &str, words: &str) -> Record
         tests: Tests::Unknown,
         scope: vec![path.into()],
         evidence: vec![words.into()],
+        seen: Default::default(),
     };
     let stamp = Stamp {
         observed_at_ms: 1,

@@ -5,6 +5,13 @@ use serde::{Deserialize, Serialize};
 
 pub const SCHEMA_VERSION: u32 = 1;
 pub const POLICY_VERSION: &str = "memory-policy/v1";
+/// Of an observation rendered by `memory-observation/v2` (PRD jev-mem §5.2). A `v1` record is
+/// never migrated: it is read as it is and leaves by retention.
+pub const OBSERVATION_POLICY_VERSION: &str = "memory-policy/v2";
+/// Names an observation's text holds, per list (PRD jev-mem §5.2).
+pub const MAX_SYMBOLS: usize = 16;
+pub const MAX_DEPENDENTS: usize = 8;
+pub const MAX_TESTS: usize = 8;
 /// `x_t`, the canonical content, in UTF-8 bytes.
 pub const MAX_CONTENT_BYTES: usize = 2_000;
 pub const MAX_ENTITIES: usize = 16;
@@ -166,7 +173,7 @@ pub struct Record {
     pub workspace_id: String,
     pub event_key: String,
     pub kind: Kind,
-    /// `x_t`, from the renderer `memory-observation/v1`.
+    /// `x_t`, from the renderer `memory-observation/v2`; `v1` in an older record.
     pub content: String,
     /// Local wall clock: evidence of when it was observed, nothing more.
     pub observed_at_ms: u64,

@@ -180,6 +180,7 @@ fn mtime_commit_and_a_clock_rollback_never_become_event_time() {
         tests: Tests::Unknown,
         scope: vec!["src/auth.py".into()],
         evidence: vec![],
+        seen: Default::default(),
     };
     let clock = Script(RefCell::new(vec![5_000, 5_000, 1_000]));
     let mut seq = Sequence::default();

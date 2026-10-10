@@ -27,7 +27,7 @@
     "memory": {
       "type": "boolean",
       "title": "Persistent memory (implies online)",
-      "description": "Além do que o modo online envia, guarda localmente observações\ndeste workspace entre sessões (no state dir, fora do repositório)\ne envia as elegíveis ao provider Jev para classificá-las e relacioná-las. Os hooks só gravam localmente; nunca fazem HTTP.\nSelecione somente uma raiz cujo conteúdo você tem autorização para enviar.",
+      "description": "Além do que o modo online envia, guarda localmente observações\ndeste workspace entre sessões (no state dir, fora do repositório)\ne envia as elegíveis ao provider Jev para classificá-las e relacioná-las. Uma observação leva\nnomes de símbolos e de testes e paths; nunca assinatura, corpo, valor ou diff. Os hooks só gravam localmente; nunca fazem HTTP.\nSelecione somente uma raiz cujo conteúdo você tem autorização para enviar.",
       "default": false
     },
     "jev_api_key": {

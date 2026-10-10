@@ -662,12 +662,17 @@ pub fn situation(payload: &str) -> Vec<Entry> {
 }
 
 /// `<edit-check>`: whether a symbol's contract changed and which callers now disagree with it.
-/// Returns the entries and whether the contract changed (so the caller may ask for `impact`).
-pub fn edit_check(payload: &str) -> (Vec<Entry>, bool) {
+/// Returns the entries, whether the contract changed (so the caller may ask for `impact`), and
+/// the symbol ripwire resolved with its file, when it named both.
+pub fn edit_check(payload: &str) -> (Vec<Entry>, bool, Option<(String, String)>) {
     let verb = "edit_check";
     let Some(root) = markup::parse(payload) else {
-        return (vec![unparsed(verb)], false);
+        return (vec![unparsed(verb)], false, None);
     };
+    let resolved = root.attr("sym").zip(root.attr("p")).and_then(|(sym, p)| {
+        let path = split_loc(p).0;
+        (!sym.is_empty() && !path.is_empty()).then(|| (sym.to_string(), path))
+    });
     let sym = root.attr("sym").unwrap_or("?").to_string();
     let changed = root.attr("status") == Some("contract-change");
     let mut out = Vec::new();
@@ -730,7 +735,7 @@ pub fn edit_check(payload: &str) -> (Vec<Entry>, bool) {
         ));
     }
     out.extend(graph_limitations(verb, GraphGaps::of_markup(&root)));
-    (out, changed)
+    (out, changed, resolved)
 }
 
 /// Files the working tree changed, as reported by `situational_awareness`.

@@ -1,6 +1,6 @@
 # PRD: memória persistente com Jev no ripwire-broker
 
-**Versão:** 0.4 · **Data:** 2026-10-10 · **Status:** proposta revisada, reconciliada com o estudo e com as decisões do mantenedor (D-135); implementada nas Fases 0 a 5 do [plano](../spec/plan/jev-mem-plan.md) (D-136 a D-142, com as correções da auditoria nos D-143 e D-144), **experimental**: faltam o texto enriquecido das observações (§5.2, `memory-observation/v2`, T3.12, decidido no D-171 e ainda não implementado), a validação nos hosts (T3.11), a rodada da avaliação (T5.3) e o fechamento (Fase 6).  
+**Versão:** 0.4 · **Data:** 2026-10-10 · **Status:** proposta revisada, reconciliada com o estudo e com as decisões do mantenedor (D-135); implementada nas Fases 0 a 5 do [plano](../spec/plan/jev-mem-plan.md) (D-136 a D-142, com as correções da auditoria nos D-143 e D-144), **experimental**: o texto enriquecido das observações (§5.2, `memory-observation/v2`, T3.12) está implementado e não passou no aceite (D-172: relevância 0,48 contra a barra de 0,60); faltam rever esse contrato, a validação nos hosts (T3.11), a rodada da avaliação (T5.3) e o fechamento (Fase 6).  
 **Base do broker:** `3b60a1b29252485bc43a3e2b0ee914203dde9211`, pacote `0.1.0`.  
 **Implementação:** Rust; System One remoto Jev `jev-1.13.0`; System Two é o agente do host, com sumarizador local opcional para notas derivadas.
 
@@ -184,9 +184,9 @@ Limite do registro serializado: 16 KiB; excesso rejeita a entrada inteira com mo
 
 ### 5.2 Formação de `x_t` e entradas permitidas
 
-Renderizador determinístico `memory-observation/v1`, ordem fixa: tipo de evento; ação observada; outcome com sua origem; escopo; referências elegíveis e seus hashes. Exemplo sintético: `Evento: análise após edição. Escopo: src/cache.rs. Observado pelo broker: análise concluída; execução de testes desconhecida. Evidência: quality_delta; revisão de fonte sha256:…`. Ausência de regressão reportada não vira “testes passaram”, “bug corrigido” ou “merge seguro”.
+Renderizador determinístico `memory-observation/v1` (o dos registros anteriores à v2), ordem fixa: tipo de evento; ação observada; outcome com sua origem; escopo; referências elegíveis e seus hashes. Exemplo sintético: `Evento: análise após edição. Escopo: src/cache.rs. Observado pelo broker: análise concluída; execução de testes desconhecida. Evidência: quality_delta; revisão de fonte sha256:…`. Ausência de regressão reportada não vira “testes passaram”, “bug corrigido” ou “merge seguro”.
 
-**Texto enriquecido, `memory-observation/v2` (v0.4, D-171; implementação na T3.12).** O texto da v1 diz que uma análise rodou sobre um arquivo e não diz sobre o quê. Numa sessão real, o Jev deu a duas observações desse tipo relevância 0,20 e 0,16 para uma tarefa sobre o mesmo arquivo, contra a barra de 0,60 do §10; uma nota explícita com o fato, no mesmo store e para a mesma tarefa, teve 0,91 e foi entregue. A leitura estava certa em recusar: o defeito era o conteúdo. A v2 acrescenta ao texto, depois do escopo e na ordem abaixo, o que o envelope da análise já traz:
+**Texto enriquecido, `memory-observation/v2` (v0.4, D-171; implementado na T3.12, D-172).** O texto da v1 diz que uma análise rodou sobre um arquivo e não diz sobre o quê. Numa sessão real, o Jev deu a duas observações desse tipo relevância 0,20 e 0,16 para uma tarefa sobre o mesmo arquivo, contra a barra de 0,60 do §10; uma nota explícita com o fato, no mesmo store e para a mesma tarefa, teve 0,91 e foi entregue. A leitura estava certa em recusar: o defeito era o conteúdo. A v2 acrescenta ao texto, depois do escopo e na ordem abaixo, o que o envelope da análise já traz:
 
 | Acréscimo | O que entra | Teto |
 |---|---|---|
@@ -207,6 +207,8 @@ Regras da v2:
 Exemplo sintético: `Evento: análise após edição. Escopo: src/auth.py. Símbolos: TOKEN_TTL_SECONDS, validate_token (src/auth.py). Dependentes: nenhum. Testes ligados: tests/test_auth.py::test_valid. Achados: nenhum risco; limitações: counts_floor. Observado pelo broker: análise concluída; execução de testes desconhecida. Evidência: situational_awareness, edit_check; revisão de fonte sha256:…`.
 
 **O que a v2 não garante.** A nota que passou na medição dizia o valor que mudou, e a v2 continua sem poder dizê-lo. Que os nomes bastem para o Jev aceitar uma observação é hipótese: mede-se repetindo o bloco B do [roteiro](../spec/plan/roteiro-testes-pendentes.md) só com observações automáticas, e o aceite é `kept≥1`. Se não bastar, o que se revê é este contrato, não a barra de entrada do §10.
+
+**Medido (2026-10-10, D-172): não bastou.** No mesmo cenário, a observação de edição com `Símbolos: TOKEN_TTL_SECONDS, validate_token (src/auth.py)` teve relevância 0,48 (era 0,20), e a de conclusão, que não resolve símbolos, 0,22 (era 0,16); `kept=0`. As outras três notas da observação de edição ficaram em 0,85 (informação nova), 0,75 (relação) e 0,54 (suporte). Uma rodada, uma tarefa. Fica em aberto o que este contrato pode dizer a mais sem guardar código, valor ou texto do host.
 
 `context_after_edit` e `context_before_finish` podem produzir observações após o envelope estrutural. Não guardar automaticamente prompt, texto da tarefa, transcript, diff, assinatura ou corpo de arquivo, saída de shell ou resultado gerativo; a v2 não muda nenhum desses. Esses registros descrevem o que foi analisado, não a intenção humana que o broker desconhece.
 

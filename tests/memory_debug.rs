@@ -149,6 +149,7 @@ fn observed(root: &Path, ws: &str, path: &str, key: &str) -> Record {
         tests: Tests::Unknown,
         scope: vec![path.into()],
         evidence: vec!["situational_awareness".into()],
+        seen: Default::default(),
     };
     let stamp = Stamp {
         observed_at_ms: 1,
