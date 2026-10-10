@@ -120,6 +120,14 @@ automáticas, que não diz sobre o que a análise foi (relevância 0,20 e 0,16 c
 uma nota explícita no mesmo store teve 0,91 e foi entregue). O conserto é a T3.12 do plano
 (`memory-observation/v2`, PRD v0.4 §5.2). Este bloco passa a ser o aceite dela.
 
+**Rodado com a T3.12 implementada ([D-172](../changelog.md#d-172--t312-o-texto-enriquecido-das-observações-e-o-aceite-que-não-passou)): não passou.** `kept=0 visited=2 requests=1
+stop=empty`. A observação de edição, agora com `Símbolos: TOKEN_TTL_SECONDS, validate_token
+(src/auth.py)`, teve relevância 0,48 (era 0,20); a de conclusão, 0,22 (era 0,16). A barra é 0,60.
+Rodado sem sessão do Claude Code: um script chamou `context_after_edit` (com os dois símbolos) e
+`context_before_finish` por MCP num `serve --online --memory`, esperou o enriquecimento, e outro
+processo chamou `context_for_task` com a tarefa deste bloco. O C continua bloqueado para
+observações automáticas.
+
 Achado do D-168: num Claude Code real, a memória é coletada, ingerida e enriquecida, mas a leitura
 visita as memórias, pergunta ao Jev e não mantém nenhuma (`kept=0`, `stop=empty`). Enquanto isso
 valer, não há memória no envelope e o C não tem o que observar.
@@ -163,9 +171,9 @@ grep ' read ' "$LOG" | tail -2
 
 - `visited=0`: a leitura não achou candidatos (índice ou recuperação).
 - `visited>0`, `kept=0`, `stop=empty`: os candidatos chegaram ao Jev e ele não aceitou nenhum.
-  É o estado de hoje, e a causa é conhecida (D-171). Para ver as notas do Jev, acrescente
+  É o estado de hoje, com a v1 (D-171) e com a v2 (D-172). Para ver as notas do Jev, acrescente
   `--log` aos `args` do `.mcp.json` (o `install` não aceita a flag) e leia o `jev.log` do state
-  dir. Depois da T3.12, se ainda der `kept=0`, o que se revê é o texto da v2, não a barra de 0,60.
+  dir. Com a T3.12 ainda dá `kept=0`: o que se revê é o texto da v2, não a barra de 0,60.
 - `kept≥1`: resolvido; siga para o C.
 
 **Aprovado:** `kept≥1` numa tarefa ligada a uma edição anterior, e `memories` no resultado de
@@ -173,8 +181,8 @@ grep ' read ' "$LOG" | tail -2
 
 ## C · T3.11: os hosts usam a memória
 
-Usa o mesmo repositório do B. Enquanto a T3.12 não existir, nenhuma observação automática é
-entregue: semeie com uma nota explícita antes da sessão que lê, e registre que foi assim.
+Usa o mesmo repositório do B. Nenhuma observação automática é entregue, nem com a T3.12
+(D-172): semeie com uma nota explícita antes da sessão que lê, e registre que foi assim.
 
 ```sh
 echo '{"text": "In src/auth.py, TOKEN_TTL_SECONDS was lowered from 3600 to 900 seconds."}' > ../note.json

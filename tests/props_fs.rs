@@ -457,6 +457,7 @@ fn no_generated_path_escapes_the_workspace_into_a_record() {
                 tests: Tests::Unknown,
                 scope: vec![path.clone()],
                 evidence: vec![],
+                seen: Default::default(),
             };
             let Ok(record) = admission::admit(&reader, "w", &draft, stamp) else {
                 return Ok(());

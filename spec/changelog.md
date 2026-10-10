@@ -114,6 +114,7 @@
 | 2026-10-10 09:45 | Roteiro dos testes pendentes, e três deles rodados: os testes ao vivo contra o Jev passam (3 de 3), o SLO do `hook --memory` passa (p95 +7,3 ms), e o overhead de batching e merge deu p95 15,8 ms, o dobro dos 8,3 ms de antes e ainda longe da meta de 75 ms | [D-169](#d-169--roteiro-dos-testes-pendentes-e-três-medições) |
 | 2026-10-10 13:10 | O SLO do `hook --memory` passa a ser medido pelo próprio hook: cada linha `collect` do `debug.log` termina com a duração, e o hook escreve uma linha `setup`. p95 de 9,5 a 9,9 ms em 16 rodadas (limite 10). A diferença de relógio entre dois hooks inteiros tem p95 de 6 ms com acréscimo zero e não serve para a cauda | [D-170](#d-170--o-slo-do-hook---memory-medido-pelo-próprio-hook) |
 | 2026-10-10 14:10 | A leitura de memória foi reproduzida e diagnosticada: ela funciona, e recusa as observações automáticas porque o texto delas não diz sobre o que a análise foi (0,20 e 0,16 contra 0,60; uma nota explícita teve 0,91). O PRD jev-mem vai à v0.4 e libera o texto enriquecido `memory-observation/v2`; a implementação é a T3.12 | [D-171](#d-171--a-leitura-recusa-as-observações-automáticas-prd-v04) |
+| 2026-10-10 17:50 | T3.12: as observações automáticas passam a dizer, só por nome, o que a análise achou (`memory-observation/v2`, `memory-policy/v2`): símbolos que o Ripwire resolveu, dependentes, testes ligados e o `kind` dos achados. O aceite manual não passou: a relevância da observação de edição foi de 0,20 para 0,48, contra a barra de 0,60 (`kept=0`). A tarefa fica aberta | [D-172](#d-172--t312-o-texto-enriquecido-das-observações-e-o-aceite-que-não-passou) |
 | 2026-10-06 15:52 | A barra mostra o servidor vivo do workspace: `[jev:N]` (requisições ao Jev), com `--memory` `[mem: retr N, stor M]` (leituras e gravações da memória), nos últimos 5 s, e `(online)` no fim; um arquivo por processo `serve`, renovado a cada 10 s e ignorado depois de 30 s | [D-154](#d-154--o-servidor-na-barra-jev-memória-e-online) |
 | 2026-10-06 15:15 | Repositório migrado da organização `CeciApp` para a conta `aquental`: remoto `origin` atualizado, URLs do diagrama de arquitetura trocadas, histórico (D-054, D-055) mantido | [D-153](#d-153--migração-do-repositório-para-aquental) |
 | 2026-10-05 00:30 | Achados baixos da memória, segunda parte, e do eval, em TDD: lease só sai livre e `finish` velho não assenta nada, somas da quota saturam, `memory retry` alcança jobs adiados, ingest perto do teto toma o que cabe, pânico do worker dito (grupo 3); guarda de shell que vê opções, palavras-chave, `-lc`, `xargs` e `find -exec`, `{repo}`/`{fix}` como uma palavra, `spent` só em braço com memória, ids de tarefa recusados, CLI do `ripwire-eval`, `history_incomplete` fora das médias, sessão cortada pela API inválida e prompt longo que segurava o timeout (grupo 3) | [D-151](#d-151--achados-baixos-da-memória-segunda-parte-e-do-eval) |
@@ -7876,3 +7877,66 @@ observação automática entregue o braço `broker-memory` mediria só custo.
 roteiro, bloco C, diz como).
 
 **Custo:** duas sessões do Claude Code, US$ 0,37 e US$ 0,26, e alguns requests ao Jev.
+
+## D-172 — T3.12: o texto enriquecido das observações, e o aceite que não passou
+
+**O que mudou.** Uma observação automática nova é renderizada pelo `memory-observation/v2` (PRD
+jev-mem v0.4 §5.2) e gravada com `policy_version: memory-policy/v2`. Depois do escopo, o texto
+diz:
+
+- `Símbolos`: nome e path dos símbolos que o `edit_check` resolveu nesta análise. Um nome que o
+  host passou e não foi conferido (além de `max_edit_checks`, ou recusado pelo Ripwire) fica fora.
+  Na análise de conclusão não há símbolo resolvido, e a lista diz `nenhum`.
+- `Dependentes`: os itens `caller` do envelope, agrupados pelo arquivo, na ordem do envelope.
+- `Testes ligados`: os paths de `tests[]` do envelope.
+- `Achados`: o `kind` de cada risco e de cada limitação, uma vez cada, com a contagem acima de um.
+
+Tetos de 16, 8 e 8. O que passa do teto, ou dos 2.000 bytes de `content`, sai do fim da lista (os
+testes primeiro, os símbolos por último) e o texto diz quantos ficaram de fora (`+3`). Todo
+identificador passa pela varredura de segredo e PII, também os que o teto cortaria; um que falhe
+recusa a observação inteira. Nunca entram assinatura, corpo, valor, diff, `message` de risco,
+`detail` de limitação, `summary` nem o texto da tarefa. Registros `v1` não são migrados. O
+`install`, o plugin e o `--help` passam a dizer que nomes de símbolos e de testes vão ao provider.
+
+**Onde.** `src/memory/admission.rs` (`Named`, `Seen`, `Draft.seen`, o renderizador),
+`src/memory/publish.rs` (o envelope vira `Seen`), `src/memory/model.rs`
+(`OBSERVATION_POLICY_VERSION`, os tetos), `src/normalize.rs` (`edit_check` devolve o símbolo
+resolvido), `src/broker.rs` (leva os símbolos resolvidos ao publicador). `src/normalize.rs` e
+`src/broker.rs` não estavam na lista da tarefa: o envelope não traz o símbolo conferido quando o
+contrato não mudou, então ele tem de vir do `edit_check`.
+
+**O aceite manual não passou.** Bloco B do roteiro, só com observações automáticas, no repositório
+de exemplo (`TOKEN_TTL_SECONDS` de 3600 para 900 em `src/auth.py`), tarefa "Add a test that a
+token older than the TTL is rejected (src/auth.py token TTL validation)", Jev `jev-1.13.0`:
+
+| Observação | Relevância v1 (D-171) | Relevância v2 | Informação nova | Relação | Suporte |
+|---|---|---|---|---|---|
+| edição (`Símbolos: TOKEN_TTL_SECONDS, validate_token (src/auth.py)`) | 0,20 | 0,48 | 0,85 | 0,75 | 0,54 |
+| conclusão (`Símbolos: nenhum`) | 0,16 | 0,22 | 0,43 | 0,53 | 0,30 |
+
+A barra de entrada é 0,60 de relevância: `read … kept=0 visited=2 requests=1 stop=empty`. Uma
+rodada, uma tarefa; não mede variação. Rodado sem sessão do Claude Code: um script chamou as tools
+por MCP num `serve --online --memory`, e um segundo processo fez a leitura.
+
+**Leitura do resultado.** A pergunta do Jev é se a memória "contém um fato necessário para
+responder". A observação diz o que foi analisado; a tarefa precisava do que mudou (o TTL novo), e
+o PRD §5.2 proíbe guardar valor. A hipótese do D-171, de que os nomes bastariam, não se confirmou
+neste caso. O PRD já diz o que fazer: rever o contrato do §5.2, não a barra do §10. A T3.12 fica
+aberta no plano, com a linha de evidência preenchida e o aceite marcado como não atendido.
+
+**Limites do que foi feito.**
+
+- `Dependentes` e `Testes ligados` vêm do envelope entregue, que já foi cortado pelo orçamento e,
+  numa sessão incremental, não repete o que a sessão já recebeu. Podem ser menos do que a análise
+  achou.
+- As entidades do registro continuam sendo de arquivo. O PRD §5.3 pede assinatura e descritor de
+  revisão para uma entidade de símbolo, e o `edit_check` não os dá.
+- A varredura de segredo é por palavra-chave: um símbolo chamado `load_api_key` recusa a
+  observação inteira, como já acontecia com um path desse nome.
+
+**Verificação.** Vermelho: `unresolved imports admission::Named, admission::Seen` e `struct Draft
+has no field named seen`; no consentimento, `names what an observation carries`. Mutação: 14 de 15
+mortas; a que sobrevive (todo item como dependente) é equivalente hoje, porque nas duas tools todo
+item do envelope já é `caller`. Portões: 845 (5 ignorados) e 882 (8 ignorados), fmt e os dois
+clippy limpos. SLO do `hook --memory` medido de novo, 5 rodadas de 200 hooks em release: p50 7,8
+a 8,2 ms, p95 9,6 a 9,8 ms, p99 10,0 ms, máximo até 15,7 ms; continua dentro de 10 e 25 ms.

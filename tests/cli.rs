@@ -4834,6 +4834,14 @@ fn install_with_memory_writes_the_flag_and_never_the_key() {
         preview.contains("guarda localmente"),
         "names the local persistence: {preview}"
     );
+    // PRD jev-mem §5.2 (v2): the names of symbols and tests go to the provider, and the
+    // install and the help say so.
+    for text in [preview.as_str(), ripwire_broker::cli::USAGE] {
+        assert!(
+            text.contains("nomes de símbolos e de testes"),
+            "names what an observation carries: {text}"
+        );
+    }
     assert!(
         preview.contains("envia as elegíveis ao provider Jev"),
         "and the history sent: {preview}"

@@ -387,24 +387,38 @@ improves correctness.
 `--memory` keeps observations of the workspace between sessions
 ([PRD](docs/jev-mem-prd.md), [plan](spec/plan/jev-mem-plan.md)). Phases 0 to 5 are built: collection,
 enrichment, consolidation, reading in `context_for_task`, and the evaluation arms. It stays
-experimental until the observations carry enough to be worth reading (T3.12, below), it is
+experimental until an automatic observation is worth reading (below), it is
 validated in real hosts (T3.11) and measured (T5.3).
 
 **What an automatic memory holds:** which analysis ran (after an edit, before finishing), its
 outcome as the broker saw it, the files in scope with the SHA-256 of their bytes, and the names
-of the analyses. The text is rendered from those fields (`memory-observation/v1`), for example
-`Evento: análise após edição. Escopo: src/cache.rs. Observado pelo broker: análise concluída;
-execução de testes desconhecida. …`. The broker never runs the tests, so it never records that
-they passed, that a bug was fixed or that a merge is safe.
+of the analyses. It also holds, by name alone, what the analysis found
+(`memory-observation/v2`): the symbols in scope that ripwire resolved, the callers and dependents
+the answer carries, the tests it points to, and the kind of each risk and limitation with its
+count. For example `Evento: análise após edição. Escopo: src/auth.py. Símbolos:
+TOKEN_TTL_SECONDS, validate_token (src/auth.py). Dependentes: test_valid (tests/test_auth.py).
+Testes ligados: tests/test_auth.py. Achados: riscos: hotspot; limitações: counts_floor. Observado
+pelo broker: análise concluída; execução de testes desconhecida. …`. It never holds a signature,
+a body, a value, a diff, the message of a risk, the detail of a limitation, the answer's summary
+or the task's text, and a symbol the host named that ripwire did not resolve stays out. At most 16
+symbols, 8 dependents and 8 tests are named; a longer list is cut at its end and says how many
+were left out (`+3`). These names are sent to the provider with the memory questions. Every one
+of them goes through the same secret and personal-data scan as a path, and one that fails
+refuses the whole observation: a symbol whose name contains `api_key`, for instance, does. The
+broker never runs the tests, so it never records that they passed, that a bug was fixed or that
+a merge is safe. A record written before this text (`memory-policy/v1`) is read as it is and
+leaves by retention.
 
 **Today no automatic memory reaches an answer.** In a real session the read visited the two
 observations of an earlier edit and kept neither: Jev scored them 0.20 and 0.16 against a bar of
 0.60, because the text says an analysis ran on a file and not what it was about. A note added
 with `memory add`, in the same store and for the same task, scored 0.91 and was delivered
-([D-171](spec/changelog.md#d-171--a-leitura-recusa-as-observações-automáticas-prd-v04)). The PRD
-now allows a richer text (`memory-observation/v2`, §5.2): the names of the symbols in scope, of
-their dependents and of the tests the analysis points to, and the kinds of its findings; never a
-signature, a body, a value or a diff. It is not built yet (T3.12).
+([D-171](spec/changelog.md#d-171--a-leitura-recusa-as-observações-automáticas-prd-v04)). The
+richer text above was built for this, and it was not enough: in the same scenario the edit
+observation that now names its symbols scored 0.48, and the finish observation 0.22, so the read
+again kept neither ([D-172](spec/changelog.md#d-172--t312-o-texto-enriquecido-das-observações-e-o-aceite-que-não-passou)). One run,
+on one task. An observation says what was analysed, not what changed, and the task needed the
+latter.
 
 **When it is collected:** after `context_after_edit` and `context_before_finish` build their
 answer, never before and never changing it; `context_for_task` collects nothing, and an answer

@@ -2151,6 +2151,73 @@ async fn after_edit_and_before_finish_publish_one_observation_after_the_envelope
     );
 }
 
+/// PRD jev-mem §5.2, `memory-observation/v2`: the observation names what the analysis found.
+#[tokio::test]
+async fn an_edit_observation_names_what_ripwire_resolved_and_nothing_the_host_only_said() {
+    let (ws, state) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    common::write(
+        ws.path(),
+        "src/auth.py",
+        "def login(user, token, mfa): ...\n",
+    );
+    let store = Arc::new(Store::new(state.path(), &"w".repeat(64)));
+    let mut config = BrokerConfig::new(ws.path());
+    // One check only: `ghost` is named by the host and never confirmed by ripwire.
+    config.max_edit_checks = 1;
+    let mut memory = MemoryConfig::new(store.clone(), "w".repeat(64), 1_000_000);
+    memory.wait = std::time::Duration::from_secs(10);
+    config.memory = Some(memory);
+    let fake = FakeUpstream::new()
+        .answer("situational_awareness", "situational_awareness_edit")
+        .answer("edit_check", "edit_check_login")
+        .answer("impact", "impact_login");
+    let b = Broker::connect(Arc::new(fake), config).await.unwrap();
+    let env = b
+        .context_after_edit(EditRequest {
+            files: vec!["src/auth.py".into()],
+            symbols: vec!["login".into(), "ghost".into()],
+            ..EditRequest::default()
+        })
+        .await
+        .unwrap();
+
+    store.ingest().unwrap();
+    let s = store.load().unwrap();
+    let r = s.nodes.values().next().expect("one observation");
+    let text = &r.content;
+    assert_eq!(r.policy_version, "memory-policy/v2");
+    assert!(text.contains("Símbolos: login (src/auth.py). "), "{text}");
+    assert!(
+        text.contains("Dependentes: ") && text.contains("home_route"),
+        "the callers the answer carries: {text}"
+    );
+    assert!(
+        text.contains("Testes ligados: tests/test_auth.py. "),
+        "{text}"
+    );
+    assert!(text.contains("riscos: contract_change"), "{text}");
+    assert!(text.contains("limitações: "), "{text}");
+
+    assert!(
+        !text.contains("ghost"),
+        "the host said it, ripwire did not: {text}"
+    );
+    // Names, never what they hold: no body, signature, risk message, detail or summary.
+    assert!(
+        env.risks.iter().all(|k| !text.contains(&k.message)),
+        "{text}"
+    );
+    assert!(
+        env.limitations.iter().all(|l| !text.contains(&l.detail)),
+        "{text}"
+    );
+    assert!(!text.contains(&env.summary), "{text}");
+    for never in ["mfa", "def login", "parameter count", "co-change degree"] {
+        assert!(!text.contains(never), "{never}: {text}");
+    }
+    assert!(text.len() <= 2_000);
+}
+
 /// A spool that takes a second per write, and counts the writes that started.
 struct Slow(Store, std::sync::atomic::AtomicUsize);
 

@@ -108,7 +108,9 @@ fn a_record_round_trips_and_an_oversized_one_is_refused_whole() {
 
 // ---------------------------------------------------------------- admission (PRD jev-mem §5.2)
 
-use ripwire_broker::memory::admission::{self, Draft, Event, Outcome, Refused, Stamp, Tests};
+use ripwire_broker::memory::admission::{
+    self, Draft, Event, Named, Outcome, Refused, Seen, Stamp, Tests,
+};
 use ripwire_broker::memory::model::{Kind, TimestampRole};
 use ripwire_broker::online::reader::{Ineligible, WorkspaceReader};
 use std::fs;
@@ -123,6 +125,7 @@ fn workspace() -> tempfile::TempDir {
     fs::create_dir_all(root.join("src")).unwrap();
     fs::write(root.join("src/cache.rs"), "fn get() {}\n").unwrap();
     fs::write(root.join("src/lib.rs"), "mod cache;\n").unwrap();
+    fs::write(root.join("src/auth.py"), "TOKEN_TTL_SECONDS = 900\n").unwrap();
     fs::write(root.join(".env"), "A=1\n").unwrap();
     fs::write(root.join(".gitignore"), "out.log\n").unwrap();
     fs::write(root.join("out.log"), "x\n").unwrap();
@@ -139,6 +142,7 @@ fn draft(scope: &[&str]) -> Draft {
         tests: Tests::Unknown,
         scope: scope.iter().map(|s| s.to_string()).collect(),
         evidence: vec!["quality_delta".into()],
+        seen: Seen::default(),
     }
 }
 
@@ -233,11 +237,12 @@ fn the_rendering_is_deterministic_and_never_claims_tests_passed() {
     assert_eq!(
         r.content,
         format!(
-            "Evento: análise após edição. Escopo: src/cache.rs. Observado pelo broker: análise \
-             concluída; execução de testes desconhecida. Evidência: quality_delta; revisão de \
-             fonte {hash}."
+            "Evento: análise após edição. Escopo: src/cache.rs. Símbolos: nenhum. Dependentes: \
+             nenhum. Testes ligados: nenhum. Achados: nenhum risco; nenhuma limitação. Observado \
+             pelo broker: análise concluída; execução de testes desconhecida. Evidência: \
+             quality_delta; revisão de fonte {hash}."
         ),
-        "the example of PRD jev-mem §5.2, byte for byte"
+        "an analysis that named nothing says so, list by list"
     );
     assert_eq!(
         admission::admit(&reader, &ws, &draft(&["src/cache.rs"]), stamp()).unwrap(),
@@ -284,4 +289,187 @@ fn the_rendering_is_deterministic_and_never_claims_tests_passed() {
             }
         }
     }
+}
+
+// ---------------------------------------------------- memory-observation/v2 (PRD jev-mem §5.2)
+
+fn symbols(names: &[&str], path: &str) -> Vec<Named> {
+    names.iter().map(|n| Named::symbol(n, path)).collect()
+}
+
+/// The draft of the PRD's example: two symbols ripwire resolved, a linked test, a limitation.
+fn example() -> Draft {
+    let mut d = draft(&["src/auth.py"]);
+    d.evidence = vec!["situational_awareness".into(), "edit_check".into()];
+    d.seen = Seen {
+        symbols: symbols(&["TOKEN_TTL_SECONDS", "validate_token"], "src/auth.py"),
+        dependents: vec![],
+        tests: vec!["tests/test_auth.py::test_valid".into()],
+        risks: vec![],
+        limitations: vec!["counts_floor".into()],
+    };
+    d
+}
+
+#[test]
+fn the_v2_rendering_says_what_the_analysis_was_about() {
+    let dir = workspace();
+    let reader = WorkspaceReader::new(dir.path()).unwrap();
+    let ws = "w".repeat(64);
+    let r = admission::admit(&reader, &ws, &example(), stamp()).unwrap();
+    let hash = &r.sources[0].sha256;
+    assert_eq!(
+        r.content,
+        format!(
+            "Evento: análise após edição. Escopo: src/auth.py. Símbolos: TOKEN_TTL_SECONDS, \
+             validate_token (src/auth.py). Dependentes: nenhum. Testes ligados: \
+             tests/test_auth.py::test_valid. Achados: nenhum risco; limitações: counts_floor. \
+             Observado pelo broker: análise concluída; execução de testes desconhecida. \
+             Evidência: situational_awareness, edit_check; revisão de fonte {hash}."
+        ),
+        "the v2 example of PRD jev-mem §5.2, byte for byte"
+    );
+    assert_eq!(r.policy_version, "memory-policy/v2");
+    assert!(
+        !r.content.contains("900"),
+        "a name, never the value: {}",
+        r.content
+    );
+    assert_eq!(
+        admission::admit(&reader, &ws, &example(), stamp()).unwrap(),
+        r,
+        "deterministic"
+    );
+
+    // Dependents keep the order ripwire gave, grouped under the file they are in; a file
+    // with no symbol named is only its path. Each kind is said once, with its count.
+    let mut d = example();
+    d.seen.dependents = vec![
+        Named::symbol("home_route", "src/routes.py"),
+        Named::symbol("export_report", "src/auth.py"),
+        Named::file("tests/test_auth.py"),
+        Named::symbol("admin_route", "src/routes.py"),
+    ];
+    d.seen.risks = vec![
+        "contract_change".into(),
+        "hotspot".into(),
+        "contract_change".into(),
+    ];
+    d.seen.limitations = vec![];
+    let text = admission::admit(&reader, &ws, &d, stamp()).unwrap().content;
+    assert!(
+        text.contains(
+            "Dependentes: home_route, admin_route (src/routes.py); export_report \
+             (src/auth.py); tests/test_auth.py. "
+        ),
+        "{text}"
+    );
+    assert!(
+        text.contains("Achados: riscos: contract_change (2), hotspot; nenhuma limitação. "),
+        "{text}"
+    );
+    assert_ne!(
+        admission::admit(&reader, &ws, &d, stamp()).unwrap().node_id,
+        r.node_id,
+        "what the analysis found is part of the node"
+    );
+}
+
+#[test]
+fn a_list_over_its_cap_is_cut_at_the_end_and_says_how_many_were_left_out() {
+    let dir = workspace();
+    let reader = WorkspaceReader::new(dir.path()).unwrap();
+    let ws = "w".repeat(64);
+    let names = |prefix: &str, n: usize| -> Vec<String> {
+        (0..n).map(|i| format!("{prefix}{i:02}")).collect()
+    };
+    let named = |prefix: &str, n: usize| -> Vec<Named> {
+        names(prefix, n)
+            .iter()
+            .map(|s| Named::symbol(s, "src/auth.py"))
+            .collect()
+    };
+    let mut d = example();
+    d.seen.symbols = named("sym", 19);
+    d.seen.dependents = named("dep", 10);
+    d.seen.tests = names("tests/t.py::test", 9);
+    let r = admission::admit(&reader, &ws, &d, stamp()).expect("cutting a list refuses nothing");
+    let text = &r.content;
+    assert!(
+        text.contains("sym15 (src/auth.py) +3. ") && !text.contains("sym16"),
+        "{text}"
+    );
+    assert!(
+        text.contains("dep07 (src/auth.py) +2. ") && !text.contains("dep08"),
+        "{text}"
+    );
+    assert!(
+        text.contains("tests/t.py::test07 +1. ") && !text.contains("test08"),
+        "{text}"
+    );
+
+    // Within every cap and still over the 2.000 bytes of `content`: the lists give way from
+    // the end, tests first, and the record is admitted.
+    let long = "x".repeat(150);
+    let mut d = example();
+    d.seen.symbols = named(&format!("s{long}"), 8);
+    d.seen.dependents = named(&format!("d{long}"), 8);
+    d.seen.tests = names(&format!("tests/{long}.py::t"), 8);
+    let r = admission::admit(&reader, &ws, &d, stamp()).expect("cut to fit, not refused");
+    assert!(r.content.len() <= MAX_CONTENT_BYTES, "{}", r.content.len());
+    assert!(r.content.contains("Testes ligados: +8. "), "{}", r.content);
+    assert!(
+        r.content.contains(&format!("s{long}07 (src/auth.py). ")),
+        "the symbols are the last to give way: {}",
+        r.content
+    );
+    assert!(r.content.ends_with(&format!("{}.", r.sources[0].sha256)));
+}
+
+#[test]
+fn an_identifier_shaped_like_a_secret_rejects_the_whole_observation() {
+    let dir = workspace();
+    let reader = WorkspaceReader::new(dir.path()).unwrap();
+    let ws = "w".repeat(64);
+    let token = format!("{}{}", "sk-", "a1B2c3D4e5F6g7H8i9J0k1L2");
+    let email = format!("{}@{}", "maria.silva", "example.com");
+    type Put = fn(&mut Seen, String);
+    let places: [Put; 5] = [
+        |s, v| s.symbols.push(Named::symbol(&v, "src/auth.py")),
+        |s, v| s.symbols.push(Named::symbol("ok", &format!("src/{v}.py"))),
+        |s, v| s.dependents.push(Named::symbol(&v, "src/auth.py")),
+        |s, v| s.dependents.push(Named::file(&format!("src/{v}.py"))),
+        |s, v| s.tests.push(format!("tests/test_auth.py::{v}")),
+    ];
+    for (i, put) in places.iter().enumerate() {
+        for (value, want) in [
+            (&token, Refused::SecretShaped),
+            (&email, Refused::PersonalData),
+        ] {
+            let mut d = example();
+            // Past the cap too: what would be cut is scanned all the same.
+            d.seen.symbols = symbols(&["a"; 16], "src/auth.py");
+            d.seen.dependents = symbols(&["b"; 8], "src/auth.py");
+            d.seen.tests = vec!["tests/test_auth.py".into(); 8];
+            put(&mut d.seen, value.clone());
+            assert_eq!(
+                admission::admit(&reader, &ws, &d, stamp()),
+                Err(want),
+                "place {i}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_v1_record_is_still_read_as_it_is() {
+    let v1 = parse(&record()).expect("no migration: a v1 record stays valid");
+    assert_eq!(v1.policy_version, "memory-policy/v1");
+    assert_eq!(
+        v1.content,
+        "Evento: análise após edição. Escopo: src/cache.rs."
+    );
+    let stored = serde_json::to_value(&v1).unwrap();
+    assert_eq!(stored["content"], record()["content"], "never re-rendered");
+    assert_eq!(stored["policy_version"], "memory-policy/v1");
 }

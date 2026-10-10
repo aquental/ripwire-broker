@@ -2,10 +2,10 @@
 //! observation goes to the spool. The answer never waits for more than a short, fixed time;
 //! past it the write carries on in the background and is counted as unconfirmed, not durable.
 
-use super::admission::{self, Draft, Event, Outcome, Stamp, Tests};
+use super::admission::{self, Draft, Event, Named, Outcome, Seen, Stamp, Tests};
 use super::store::Spool;
 use super::time::{Clock, SystemClock};
-use crate::model::{Envelope, Status};
+use crate::model::{Envelope, Role, Status};
 use crate::online::reader::WorkspaceReader;
 use serde::Serialize;
 use std::path::Path;
@@ -117,12 +117,14 @@ impl Publisher {
     }
 
     /// Publishes what `env` observed about `scope`. An answer the broker could not assess
-    /// (`unknown`) claims nothing, so it is not observed.
+    /// (`unknown`) claims nothing, so it is not observed. `symbols` are the ones ripwire
+    /// resolved in this analysis, never the ones the host only named (PRD jev-mem §5.2).
     pub async fn observe(
         &self,
         event: Event,
         env: &Envelope,
         scope: Vec<String>,
+        symbols: Vec<Named>,
         event_key: String,
     ) {
         // Every line ends with how long the answer was held here (PRD jev-mem §8.2).
@@ -178,6 +180,7 @@ impl Publisher {
                 .iter()
                 .map(|v| v.to_string())
                 .collect(),
+            seen: seen(env, symbols),
         };
         let stamp = Stamp {
             observed_at_ms: SystemClock.now_ms(),
@@ -229,6 +232,26 @@ impl Publisher {
 
     fn count(&self, f: impl FnOnce(&mut Counts)) {
         f(&mut self.counts.lock().unwrap());
+    }
+}
+
+/// What the answer carries, by name alone: no signature, body, risk message, limitation
+/// detail or summary (PRD jev-mem §5.2).
+fn seen(env: &Envelope, symbols: Vec<Named>) -> Seen {
+    Seen {
+        symbols,
+        dependents: env
+            .items
+            .iter()
+            .filter(|i| i.role == Role::Caller)
+            .map(|i| Named {
+                name: i.symbol.clone(),
+                path: i.path.clone(),
+            })
+            .collect(),
+        tests: env.tests.iter().map(|t| t.path.clone()).collect(),
+        risks: env.risks.iter().map(|r| r.kind.to_string()).collect(),
+        limitations: env.limitations.iter().map(|l| l.kind.to_string()).collect(),
     }
 }
 

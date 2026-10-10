@@ -76,6 +76,7 @@ pub async fn remembering_configured(
         tests: Tests::Unknown,
         scope: vec!["src/cache.rs".into()],
         evidence: vec!["quality_delta".into()],
+        seen: Default::default(),
     };
     let stamp = Stamp {
         observed_at_ms: 1,
