@@ -55,6 +55,10 @@ pub struct RunRecord {
     pub memory_retrieval_questions: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub memories_delivered: Option<u64>,
+    /// How each of the session's memory reads stopped (`provenance.memory.stop_reason`): a note
+    /// the classifier kept and the budget left out is not one the classifier refused.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub memory_stop_reasons: Option<Vec<String>>,
     /// ...and what the store's 24-hour quota grew by during the session besides them: the
     /// worker's enrichment and consolidation.
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -933,6 +933,23 @@ cargo build --release
 - **Cost:** every run is a paid agent session. `--agent-cmd` replaces the whole agent command (split on
   whitespace, never through a shell); to cap each Claude Code run, pass the default command with
   `--max-budget-usd N` added. `ripwire-eval --help` prints the default.
+- **Codex:** `ripwire-eval` reads `codex exec --json` too. Codex takes its MCP servers as configuration
+  overrides, not as a file, so the command names where the arm goes with `{codex_mcp}`, an argument of its
+  own that becomes the arm's `-c mcp_servers.…` overrides (the credential is named in `env_vars`, never
+  written on the command line):
+
+  ```sh
+  ripwire-eval run --corpus corpus.json --out out/ --arms broker-online,broker-memory \
+    --agent-cmd 'codex exec --json --ignore-user-config --skip-git-repo-check --sandbox workspace-write -m MODEL {codex_mcp}'
+  ```
+
+  Codex says less than Claude Code. A session has no version, model, cost or duration: `agent` is
+  `codex`, `cost_usd` is 0 and the duration is the runner's clock at the end of the turn. It lists no
+  MCP servers, so a server is known by the calls made to it: a session that never called the arm's
+  server is recorded as invalid, and a foreign server is seen only if the agent used it.
+  `--ignore-user-config` keeps your `~/.codex/config.toml` servers out, but Codex 0.161.0 still reads the
+  skills under `~/.agents/skills` and the user-level `AGENTS.md`, and still adds each run's directory to
+  the `[projects]` of your `config.toml`.
 
 ## Tests
 

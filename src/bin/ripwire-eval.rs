@@ -20,7 +20,8 @@ usage: ripwire-eval check --corpus FILE
 
 --agent-cmd is split on whitespace and never run through a shell; {mcp_config} and {workdir}
 are replaced per run, and the task's prompt arrives on stdin. The default drives Claude Code
-headless, isolated from your own settings, hooks and MCP servers.
+headless, isolated from your own settings, hooks and MCP servers. For `codex exec --json`, an
+argument {codex_mcp} becomes the arm's servers as `-c mcp_servers...` overrides.
 --shuffle draws the order of the arms for each task (or sequence) and repeat from SEED; a task
 with \"continues\": true starts from the tree the previous session of its sequence left.
 Each run costs whatever the agent spends: a real run of the corpus is paid.";

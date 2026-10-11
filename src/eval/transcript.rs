@@ -1,12 +1,17 @@
-//! An agent transcript (Claude Code `--output-format stream-json`) reduced to counts. Each line
-//! is stored with the runner's clock, `{"at_ms": N, "event": {...}}`, because the stream itself
-//! carries no per-event time.
+//! An agent transcript (Claude Code `--output-format stream-json`, or `codex exec --json`)
+//! reduced to counts. Each line is stored with the runner's clock, `{"at_ms": N, "event": {...}}`,
+//! because neither stream carries a per-event time.
 //!
-//! A transcript that lacks the `init` or the `result` event is **invalid**, never zero: a parser
-//! that read nothing must not pass for an agent that spent nothing.
+//! A transcript that lacks the `init` or the `result` event (in Codex, `thread.started` and the
+//! end of the turn) is **invalid**, never zero: a parser that read nothing must not pass for an
+//! agent that spent nothing.
+//!
+//! Codex says less than Claude Code: no version or model, no cost, no duration (the runner's
+//! clock at the end of the turn stands for it), and no list of the MCP servers it started. A
+//! server is known by the calls made to it, and connected when one of them was answered.
 
 use serde::Serialize;
-use serde_json::Value;
+use serde_json::{Value, json};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
@@ -69,6 +74,8 @@ pub struct Summary {
     /// What the broker's memory reads reported in `provenance.memory`, summed, and the memories
     /// it delivered. `None` when no answer carried a memory read.
     pub memory_read: Option<MemoryRead>,
+    /// How each of those reads stopped (`provenance.memory.stop_reason`), in order.
+    pub memory_stops: Vec<String>,
     /// Files the broker presented, in the order it first presented them.
     pub presented_files: Vec<String>,
     pub presented_tests: Vec<String>,
@@ -402,6 +409,9 @@ fn on_mcp_result(s: &mut Summary, name: &str, text: &str, waited: u64) {
         m.requests += read["requests"].as_u64().unwrap_or(0);
         m.questions += read["questions"].as_u64().unwrap_or(0);
         m.delivered += env["memories"].as_array().map_or(0, |a| a.len() as u64);
+        if let Some(stop) = read["stop_reason"].as_str() {
+            s.memory_stops.push(stop.to_string());
+        }
     }
     for (key, list) in [
         ("items", &mut s.presented_files),
@@ -427,6 +437,63 @@ fn on_result(s: &mut Summary, e: &Value) {
     s.cost_usd = e["total_cost_usd"].as_f64().unwrap_or(0.0);
     s.duration_ms = e["duration_ms"].as_u64().unwrap_or(0);
     s.is_error = e["is_error"].as_bool().unwrap_or(false);
+}
+
+/// One Codex item (`item.started` or `item.completed`): counted when first seen, as the tool call
+/// Claude Code would have made, and an MCP call's answer read when it completes.
+fn on_codex_item(
+    s: &mut Summary,
+    names: &mut HashMap<String, (String, u64)>,
+    at: u64,
+    item: &Value,
+    completed: bool,
+) {
+    let (name, input) = match item["type"].as_str() {
+        Some("command_execution") => ("Bash".to_string(), json!({"command": item["command"]})),
+        Some("file_change") => ("Edit".to_string(), Value::Null),
+        Some("mcp_tool_call") => {
+            let server = item["server"].as_str().unwrap_or("");
+            push_new(&mut s.mcp_servers, server);
+            let tool = item["tool"].as_str().unwrap_or("");
+            (format!("mcp__{server}__{tool}"), item["arguments"].clone())
+        }
+        _ => return,
+    };
+    let id = item["id"].as_str().unwrap_or("");
+    if !names.contains_key(id) {
+        on_tool_use(
+            s,
+            names,
+            at,
+            &json!({"id": id, "name": name, "input": input}),
+        );
+    }
+    if !completed || item["type"] != "mcp_tool_call" {
+        return;
+    }
+    let server = item["server"].as_str().unwrap_or("").to_string();
+    if item["status"] == "completed" {
+        s.mcp_status.insert(server, "connected".into());
+        let waited = at.saturating_sub(names.get(id).map_or(at, |n| n.1));
+        on_mcp_result(s, &name, &result_text(&item["result"]["content"]), waited);
+    } else {
+        let status = item["status"].as_str().unwrap_or("failed").to_string();
+        s.mcp_status.entry(server).or_insert(status);
+    }
+}
+
+/// The end of a Codex turn. `input_tokens` holds the cached ones, so the total is what the
+/// provider counts: input and output.
+fn on_codex_turn(s: &mut Summary, at: u64, e: &Value) {
+    let u = &e["usage"];
+    let n = |k: &str| u[k].as_u64().unwrap_or(0);
+    s.tokens = Tokens {
+        input: n("input_tokens").saturating_sub(n("cached_input_tokens")),
+        cache_creation: 0,
+        cache_read: n("cached_input_tokens"),
+        output: n("output_tokens"),
+    };
+    s.duration_ms = at;
 }
 
 /// The content blocks of an `assistant` or `user` message that have type `kind`.
@@ -485,6 +552,33 @@ pub fn summarize(events: &[(u64, Value)]) -> Summary {
                         .collect();
                     api_error = Some(format!("the agent's API failed: {said}"));
                 }
+            }
+            Some("thread.started") => {
+                saw_init = true;
+                s.agent = Some("codex".into());
+            }
+            Some(kind @ ("item.started" | "item.completed")) => {
+                on_codex_item(
+                    &mut s,
+                    &mut names,
+                    *at,
+                    &e["item"],
+                    kind == "item.completed",
+                );
+            }
+            Some("turn.completed") => {
+                saw_result = true;
+                on_codex_turn(&mut s, *at, e);
+            }
+            Some("turn.failed") => {
+                saw_result = true;
+                let said: String = e["error"]["message"]
+                    .as_str()
+                    .unwrap_or("")
+                    .chars()
+                    .take(200)
+                    .collect();
+                api_error = Some(format!("the agent's API failed: {said}"));
             }
             _ => {}
         }

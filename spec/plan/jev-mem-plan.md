@@ -602,6 +602,16 @@ canônica); o runner ganha o campo `sequence` na T5.1.
   a memória aceita entra e os itens de menor prioridade cedem. Antes da etapa 2: a pergunta de
   relevância (o classificador recusou 4 de 8 leituras na conferência), tirar ou reescrever
   `ports`, levar o `stop_reason` da leitura ao registro.
+  **Etapa 2, feita ([D-186](../changelog.md#d-186--etapa-2-da-t53-o-braço-b-não-passa-no-gate-de-custo-o-classificador-recusa-metade-das-leituras)):**
+  13 sequências (30 sessões), braços A, B e C, 3 repetições, 270 sessões. Acerto e latência
+  passam; tokens com histórico relevante: B 0,99 (IC 0,87 a 1,07), C 0,89 (IC 0,82 a 1,02). O
+  braço B entrega a memória em 21 de 43 leituras. **`--memory` não é promovido.** O instrumento
+  passou a ler o Codex e a registrar o `stop_reason`
+  ([D-185](../changelog.md#d-185--o-ripwire-eval-mede-o-codex-e-leva-o-stop_reason-da-leitura-ao-registro)).
+  **Etapa 3, inconclusiva ([D-187](../changelog.md#d-187--etapa-3-da-t53-a-rodada-do-codex-parou-no-limite-de-uso)):**
+  o Codex bateu no limite de uso em 16 de 60 sessões e o guarda invalidou 9; sobraram 4 pares.
+  Abertos: a pergunta de relevância, a nota com muitas fontes que passa da parte da memória, a
+  base do corpus sem o graft, refazer a etapa 3, três repositórios.
 
 **Saída da Fase 5:** CA-16 coberto no instrumento (T5.0–T5.2); a rodada (T5.3) é manual; PR único.
 

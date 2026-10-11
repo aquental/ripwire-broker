@@ -121,6 +121,33 @@ impl Arm {
         json!({"mcpServers": servers})
     }
 
+    /// The same servers for `codex exec`, which takes them as configuration overrides: each
+    /// `-c` and its `key=value` are arguments of their own, and a JSON string or array of strings
+    /// is the TOML Codex reads. Codex starts a server without the caller's environment, so an arm
+    /// that needs the credential names it (`env_vars`); the value never goes on a command line.
+    pub fn codex_overrides(self, tools: &Tools, workdir: &Path, state: &Path) -> Vec<String> {
+        let config = self.mcp_config(tools, workdir, state);
+        let mut out = vec![];
+        let mut set = |key: String, value: &Value| {
+            out.extend(["-c".to_string(), format!("{key}={value}")]);
+        };
+        for (name, server) in config["mcpServers"].as_object().into_iter().flatten() {
+            let key = format!("mcp_servers.{name}");
+            set(format!("{key}.command"), &server["command"]);
+            set(format!("{key}.args"), &server["args"]);
+            for (var, value) in server["env"].as_object().into_iter().flatten() {
+                set(format!("{key}.env.{var}"), value);
+            }
+            if self.needs_credential() {
+                set(
+                    format!("{key}.env_vars"),
+                    &json!([super::runner::ONLINE_KEY]),
+                );
+            }
+        }
+        out
+    }
+
     /// Why a run cannot count for this arm: a hook that ran (it injects into every arm), a context
     /// tool run from the shell that the arm does not include, an MCP
     /// server the arm did not declare (the user's global configuration leaking in), or the arm's
