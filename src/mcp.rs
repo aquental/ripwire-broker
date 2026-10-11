@@ -10,7 +10,10 @@ use crate::upstream::{RipwireUpstream, UpstreamConfig};
 use async_trait::async_trait;
 use rust_mcp_sdk::McpObserver;
 use rust_mcp_sdk::mcp_server::ServerHandler;
-use rust_mcp_sdk::schema::schema_utils::{CallToolError, ClientMessage, ServerMessage};
+use rust_mcp_sdk::schema::GenericResult;
+use rust_mcp_sdk::schema::schema_utils::{
+    CallToolError, ClientMessage, CustomRequest, ServerMessage,
+};
 use rust_mcp_sdk::schema::{
     CallToolRequestParams, CallToolResult, CancelledNotificationParams, ListResourcesResult,
     ListToolsResult, PaginatedRequestParams, ReadResourceRequestParams, RpcError, ServerResult,
@@ -475,6 +478,33 @@ impl BrokerServer {
     }
 }
 
+/// The MCP versions with an `initialize` handshake that this server answers, newest first. One
+/// it was not asked in gets the newest (D-177).
+const OLDER_PROTOCOLS: [&str; 4] = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
+
+/// What 2026-07-28 has every request declare in `_meta`, for a request of an older client,
+/// which declared it once in `initialize`. Whatever that client did put in `_meta` stays.
+fn declare_client(params: &mut Value) {
+    if !params["_meta"].is_object() {
+        params["_meta"] = json!({});
+    }
+    for (key, default) in [
+        ("io.modelcontextprotocol/clientCapabilities", json!({})),
+        (
+            "io.modelcontextprotocol/clientInfo",
+            json!({"name": "older-mcp-client", "version": "0"}),
+        ),
+        (
+            "io.modelcontextprotocol/protocolVersion",
+            json!("2026-07-28"),
+        ),
+    ] {
+        if params["_meta"].get(key).is_none() {
+            params["_meta"][key] = default;
+        }
+    }
+}
+
 #[async_trait]
 impl ServerHandler for BrokerServer {
     async fn handle_list_tools_request(
@@ -509,6 +539,68 @@ impl ServerHandler for BrokerServer {
             }),
         };
         Ok(tool_result(result).into())
+    }
+
+    /// A client of an MCP older than 2026-07-28 opens with `initialize` and sends its requests
+    /// without the per-request `_meta` that replaced it; the SDK, which speaks only the newer
+    /// protocol, hands every one of those here (D-177). Each is answered by the same handler a
+    /// newer client reaches, so the tools, their answers and the cancellation are one.
+    async fn handle_custom_request(
+        &self,
+        request: CustomRequest,
+        context: &RequestContext,
+        runtime: Arc<dyn McpServer>,
+    ) -> Result<GenericResult, RpcError> {
+        let internal =
+            |e: serde_json::Error| RpcError::internal_error().with_message(e.to_string());
+        let invalid = |e: serde_json::Error| RpcError::invalid_params().with_message(e.to_string());
+        let mut params = Value::Object(request.params.unwrap_or_default());
+        let mut value = match request.method.as_str() {
+            "initialize" => {
+                let details = runtime.server_details();
+                let asked = params["protocolVersion"].as_str().unwrap_or_default();
+                json!({
+                    "protocolVersion": OLDER_PROTOCOLS
+                        .iter()
+                        .find(|v| **v == asked)
+                        .unwrap_or(&OLDER_PROTOCOLS[0]),
+                    "capabilities": details.capabilities,
+                    "serverInfo": details.server_info,
+                    "instructions": details.instructions,
+                })
+            }
+            "ping" => json!({}),
+            "tools/list" => {
+                let listed = self.handle_list_tools_request(None, context, runtime);
+                serde_json::to_value(listed.await?).map_err(internal)?
+            }
+            "tools/call" => {
+                declare_client(&mut params);
+                let call = serde_json::from_value(params).map_err(invalid)?;
+                let called = self.handle_call_tool_request(call, context, runtime).await;
+                let called =
+                    called.map_err(|e| RpcError::internal_error().with_message(e.to_string()))?;
+                serde_json::to_value(called).map_err(internal)?
+            }
+            "resources/list" => {
+                let listed = self.handle_list_resources_request(None, context, runtime);
+                serde_json::to_value(listed.await?).map_err(internal)?
+            }
+            "resources/read" => {
+                declare_client(&mut params);
+                let read = serde_json::from_value(params).map_err(invalid)?;
+                let read = self.handle_read_resource_request(read, context, runtime);
+                serde_json::to_value(read.await?).map_err(internal)?
+            }
+            other => {
+                return Err(RpcError::method_not_found()
+                    .with_message(format!("No handler is implemented for '{other}'.")));
+            }
+        };
+        if value.get("resultType").is_none() {
+            value["resultType"] = json!("complete");
+        }
+        serde_json::from_value(value).map_err(internal)
     }
 
     async fn handle_cancelled_notification(

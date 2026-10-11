@@ -207,11 +207,12 @@ $B memory add --workspace "$W" --file ../note.json
 | Claude Code 2.1.296, descrição antiga | não (1 sessão: `context_before_finish {}`) | — | — |
 | Claude Code 2.1.296, descrição que pede a nota | sim, 2 de 2 | sim (`kept=1`, 0,67) | não demonstrado |
 | Claude Code 2.1.296, nota semeada à mão | — | sim (`kept=1`, 0,80) | não demonstrado |
-| Codex 0.161.0 | as tools do servidor não ficam disponíveis | — | — |
+| Codex 0.161.0, antes do D-177 | as tools do servidor não ficam disponíveis | — | — |
+| Codex 0.161.0, com o D-177 | sim, 2 de 2 | não (`kept=0`, 0,33) | — |
 
 O que falta neste bloco: uma sessão de controle sem memória, para dizer se o comportamento do
-Claude Code muda; o Codex, que depende de o servidor aceitar `initialize`; e as fixtures em
-`tests/memory_hosts.rs`. No Codex, o `install codex --write` só imprime o bloco do
+Claude Code muda; no Codex, uma nota que a leitura aceite (a que ele escreveu teve 0,33); e as
+fixtures em `tests/memory_hosts.rs`. No Codex, o `install codex --write` só imprime o bloco do
 `~/.codex/config.toml`: é preciso acrescentá-lo à mão.
 
 ### Claude Code
