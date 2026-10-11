@@ -118,6 +118,7 @@
 | 2026-10-10 20:40 | A entrega de memória destrava pela nota do agente: `context_before_finish` aceita `note` (até 500 bytes), guardada como nota `host_supplied` com `--memory`; no cenário do roteiro ela teve 0,77 e foi entregue. Cinco acréscimos estruturados ao texto das observações foram medidos e nenhum cruzou a barra. O molde da v2 fica enxuto (sem lista vazia, hash nem limitações). PRD jev-mem v0.5: §5.2 e consentimento | [D-173](#d-173--a-nota-do-agente-na-conclusão-e-o-molde-enxuto-prd-v05) |
 | 2026-10-10 22:30 | O hook não força mais o disco: o spool da memória, o estado da sessão e a status line são gravados por temporário e rename, sem `sync_all`. O acréscimo do `--memory` cai de p95 9,4–9,9 ms para 1,9–2,0 ms, e todo hook fica cerca de 7 ms mais curto. Medido o hook inteiro em três repositórios: o custo que sobra é a consulta ao Ripwire, que cresce com o repositório | [D-174](#d-174--o-hook-não-força-o-disco) |
 | 2026-10-10 23:40 | A janela que segura uma rajada de edições passa a contar do fim da resposta, como os documentos já diziam; contada do início, uma análise mais longa que a janela não segurava nada. Numa rajada de 12 edições num repositório de 11 mil arquivos, as análises caem de 12 para 3 ou 4 e a espera nos hooks de 12 s para 3 a 4 s. No binário e no mod do Claude Code | [D-175](#d-175--a-janela-das-edições-conta-do-fim-da-resposta) |
+| 2026-10-11 00:30 | Bloco C do roteiro rodado. O Claude Code 2.1.296 não escrevia a nota: a descrição do campo começava por "With --memory only", e o agente não sabe se o servidor guarda memória. A descrição da tool passa a pedir a nota, e o agente a escreveu em 2 de 2 sessões; a nota voltou na sessão seguinte (0,67). O uso da memória não ficou demonstrado. O Codex 0.161.0 não alcança as tools do servidor: ele recusa `initialize` | [D-176](#d-176--bloco-c-o-claude-code-escreve-a-nota-quando-a-tool-pede-o-codex-não-fala-com-o-servidor) |
 | 2026-10-06 15:52 | A barra mostra o servidor vivo do workspace: `[jev:N]` (requisições ao Jev), com `--memory` `[mem: retr N, stor M]` (leituras e gravações da memória), nos últimos 5 s, e `(online)` no fim; um arquivo por processo `serve`, renovado a cada 10 s e ignorado depois de 30 s | [D-154](#d-154--o-servidor-na-barra-jev-memória-e-online) |
 | 2026-10-06 15:15 | Repositório migrado da organização `CeciApp` para a conta `aquental`: remoto `origin` atualizado, URLs do diagrama de arquitetura trocadas, histórico (D-054, D-055) mantido | [D-153](#d-153--migração-do-repositório-para-aquental) |
 | 2026-10-05 00:30 | Achados baixos da memória, segunda parte, e do eval, em TDD: lease só sai livre e `finish` velho não assenta nada, somas da quota saturam, `memory retry` alcança jobs adiados, ingest perto do teto toma o que cabe, pânico do worker dito (grupo 3); guarda de shell que vê opções, palavras-chave, `-lc`, `xargs` e `find -exec`, `{repo}`/`{fix}` como uma palavra, `spent` só em braço com memória, ids de tarefa recusados, CLI do `ripwire-eval`, `history_incomplete` fora das médias, sessão cortada pela API inválida e prompt longo que segurava o timeout (grupo 3) | [D-151](#d-151--achados-baixos-da-memória-segunda-parte-e-do-eval) |
@@ -8176,3 +8177,65 @@ right: 1`) e, no mod, `the second counts from the end of the answer, however lon
 (`Expected: undefined`). Tirar o carimbo, ou trocá-lo pelo menor dos dois, devolve exatamente
 essas falhas. O teste do binário usa tempo real, cerca de 4,7 s, porque a costura é o processo.
 Portões: 849 (5 ignorados) e 887 (8 ignorados), fmt e os dois clippy limpos; mod: 47 testes.
+
+## D-176 — Bloco C: o Claude Code escreve a nota quando a tool pede; o Codex não fala com o servidor
+
+**O que foi rodado.** O bloco C do roteiro (T3.11) no repositório de exemplo (`TOKEN_TTL_SECONDS`
+de 3600 para 900 em `src/auth.py`), instalado por `install claude-code --online --memory`, com
+state dir isolado. Sessão 1: "In src/auth.py change TOKEN_TTL_SECONDS to 900."; sessão 2: "Add a
+test that a token older than the TTL is rejected."; as duas com "Use the ripwire-broker tools as
+their instructions say." e `claude -p`.
+
+**Claude Code 2.1.296.**
+
+| Rodada | Sessão 1: a nota | Sessão 2: a leitura |
+|---|---|---|
+| Descrição do D-173 | não escreveu: `context_before_finish {}` | nota semeada com `memory add`: `kept=1`, relevância 0,80 |
+| Descrição nova, workspace 1 | escreveu | `kept=1`, relevância 0,67 |
+| Descrição nova, workspace 2 | escreveu | não rodada |
+
+As notas que o agente escreveu:
+
+- "Changed TOKEN_TTL_SECONDS in src/auth.py from 3600 to 900 at the user's request, so
+  validate_token now accepts tokens for 15 minutes instead of 60."
+- "Changed TOKEN_TTL_SECONDS in src/auth.py from 3600 to 900, so validate_token now rejects tokens
+  older than 15 minutes instead of 1 hour."
+
+**Por que não escrevia.** A descrição do campo `note` começava por "With --memory only", e o
+agente não tem como saber se o servidor roda com `--memory`. A skill que pede a nota só chega a
+quem usa o plugin; a instalação por `.mcp.json` mostra ao agente as instruções do servidor e as
+descrições das tools, e nenhuma pedia a nota.
+
+**O que mudou no código.** `src/mcp.rs`: a descrição de `context_before_finish` termina com "If
+you changed code, pass `note`: one or two sentences on what changed and why."; a do campo começa
+pelo que escrever e diz depois o que acontece com e sem `--memory`. Nada mais: o limite, a
+varredura e o destino são os do D-173.
+
+**O que não ficou demonstrado: que o agente usa a memória.** Nas duas sessões de leitura a nota
+estava em `memories[]` e o agente não a citou. Nas duas ele escreveu o teste sobre a constante
+`TOKEN_TTL_SECONDS` em vez do número; sem uma sessão de controle sem memória não dá para atribuir
+isso a ela. A nota escrita pelo agente teve 0,67, mais perto da barra de 0,60 do que as notas dos
+testes por script (0,77 a 0,91).
+
+**Codex 0.161.0: as tools do servidor não ficam disponíveis.** Em três sessões (`codex exec
+--json`), duas com o servidor passado por `-c` e uma com o bloco no `~/.codex/config.toml`, o
+`codex mcp list` mostra o servidor, o processo sobe (cria o store), e o agente diz que as tools
+"aren't available in this session" e segue sem elas. O servidor, chamado à mão com o handshake
+clássico, responde `-32601 No handler is implemented for custom requests` ao `initialize` e ao
+`tools/list` sem o `_meta` da versão: ele só fala o MCP stateless de `2026-07-28`
+(`rust-mcp-sdk` 2.0.0). Não vi o que o Codex manda no fio; a causa é provável, não provada. Isso
+é anterior à memória e vale para as três tools. Os hooks do Codex são comandos à parte e não
+passam por aí.
+
+Dois achados menores: o `install codex --write` não grava o bloco `[mcp_servers.ripwire-broker]`,
+só o imprime ("Add to …"); e o `~/.codex/config.toml` do mantenedor foi copiado antes, alterado
+para o teste e restaurado ao fim, idêntico ao backup.
+
+**Estado da T3.11.** Aberta. Falta: a sessão de controle no Claude Code, o Codex, e as fixtures
+gravadas em `tests/memory_hosts.rs`. O `--memory` continua experimental.
+
+**Custo.** Cinco sessões do Claude Code, US$ 1,56; três do Codex na conta do mantenedor.
+
+**Verificação.** Vermelho: `tests/mcp_surface.rs::publishes_three_read_only_tools_and_a_status_resource`,
+`With --memory only: one or two sentences…` (a descrição não começava pelo que escrever).
+Portões: 849 (5 ignorados) e 887 (8 ignorados), fmt e os dois clippy limpos.

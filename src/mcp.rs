@@ -326,12 +326,13 @@ pub fn tools(online: bool) -> Vec<Tool> {
             "context_before_finish",
             "Gate before finishing",
             "Call before declaring the task done: quality regressions, tests to run and open obligations. \
-             status is ready | attention_required | unknown; ready means no open obligation was detected, not that the code is correct.",
+             status is ready | attention_required | unknown; ready means no open obligation was detected, not that the code is correct. \
+             If you changed code, pass `note`: one or two sentences on what changed and why.",
             json!({
                 "budget_tokens": budget_schema(1800),
                 "include_test_commands": {"type": "boolean", "default": true, "description": "Include run commands when known."},
                 "strict": {"type": "boolean", "default": false, "description": "Also treat minor findings as blocking."},
-                "note": {"type": "string", "maxLength": 500, "description": "With --memory only: one or two sentences on what you changed and why, in plain words (which symbol, which behavior). Kept for later sessions of this workspace and sent to the memory provider. No secrets, keys or personal data. Ignored without --memory."},
+                "note": {"type": "string", "maxLength": 500, "description": "One or two sentences on what you changed and why, in plain words (which symbol, which behavior). When the server runs with --memory it is kept for later sessions of this workspace and sent to the memory provider; otherwise it is ignored. No secrets, keys or personal data."},
             }),
             &[],
         ),

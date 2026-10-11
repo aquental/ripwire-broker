@@ -415,7 +415,8 @@ sentences on what changed and why. With `--memory` it is kept as an explicit not
 like any other memory; without `--memory` it is ignored. At most 500 bytes: a longer one is
 refused whole, as is one that looks like a secret or personal data. It never changes the answer,
 and it reaches a later session as untrusted data, never as an instruction. The hooks have no
-note. This is the only text of the host that `--memory` keeps without a command of yours, and
+note. The tool's description asks the agent for it ("If you changed code, pass `note`"): that is
+the one text every host shows its agent, where the skill reaches only the plugin's users. This is the only text of the host that `--memory` keeps without a command of yours, and
 `install` says so before writing anything.
 
 **Why the note exists: an automatic observation alone does not reach an answer.** Jev asks
@@ -537,10 +538,19 @@ content, a memory the session was not told is news, and the injected context get
 readable section as the MCP text block when it fits the host's 9,000 characters (the memories
 stay in the JSON either way). `#ripwire-off` stops injection for that session only.
 
-**Hosts: not validated.** Whether Claude Code and Codex actually use the `memories` field or the
-readable section has not been checked in a real session yet
-([plan](spec/plan/jev-mem-plan.md), T3.11); until it is, neither host counts as consuming memory.
-Until T3.12 only an explicit note is delivered, so that is what a host can be checked with.
+**Hosts: partly validated** ([D-176](spec/changelog.md#d-176--bloco-c-o-claude-code-escreve-a-nota-quando-a-tool-pede-o-codex-não-fala-com-o-servidor)).
+
+- **Claude Code 2.1.296** writes the note and receives it back. With the note asked for in the
+  tool's own description, the agent wrote one in 2 of 2 sessions, and the next session got it in
+  `memories` (relevance 0.67). Before that sentence was there it wrote none: an agent only reads
+  what the server tells it. Whether it *uses* a memory is not shown: it received one and did not
+  cite it, and nothing in what it did can be told apart from a session without memory.
+- **Codex 0.161.0** does not reach the server's tools at all, with or without memory. The server
+  speaks only the stateless MCP of `2026-07-28` and refuses the `initialize` handshake; Codex
+  listed the server and its agent reported the tools as unavailable. The Codex hooks are separate
+  commands and are not affected. This is a gap of the server, not of memory.
+
+Neither host counts as consuming memory yet ([plan](spec/plan/jev-mem-plan.md), T3.11).
 
 #### Following memory live
 

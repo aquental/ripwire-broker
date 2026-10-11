@@ -122,6 +122,12 @@ async fn publishes_three_read_only_tools_and_a_status_resource() {
                     says.contains("--memory") && says.contains("provider"),
                     "{says}"
                 );
+                // An agent cannot tell whether the server keeps memory, so the note is asked
+                // for without that condition in front, and where every host reads it: the
+                // tool's own description (D-176).
+                assert!(says.starts_with("One or two sentences"), "{says}");
+                let tool = t.description.as_deref().unwrap_or_default();
+                assert!(tool.contains("If you changed code, pass `note`"), "{tool}");
             }
             _ => assert!(note.is_null(), "{}", t.name),
         }
