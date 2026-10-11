@@ -205,7 +205,13 @@ Os instrumentos estão prontos; as medições, não.
   (arquivo, símbolo, o que ele passou a fazer) e um exemplo; com isso as notas dos dois hosts
   foram entregues em 4 de 4 rodadas (0,65 a 0,81). O exemplo molda a nota: as quatro começaram
   por "In src/auth.py,". Foi medido numa tarefa e num repositório pequeno; a T5.3 é quem diz se
-  vale em geral. O que continua sem demonstração é o agente **usar** a memória. Uma tool nova tem de ser alcançada
+  vale em geral.
+- **Sessões de controle (D-179): a memória chega e não muda o que o agente faz.** Cenário feito
+  para a memória importar (um teste novo contradiz a mudança da sessão anterior). Com e sem
+  memória, o Claude Code desfez a mudança anterior (3 de 3 e 3 de 3) e o Codex a manteve e
+  corrigiu o teste (2 de 2 e 2 de 2). Nos dois braços o agente leu o histórico no git. A nota diz
+  o que mudou, não que a mudança foi pedida: é a primeira coisa a rever. **É o que segura a
+  promoção do `--memory` hoje**, mais do que a T5.3. Uma tool nova tem de ser alcançada
   pelos dois dialetos: `tests/mcp_surface.rs::a_client_of_an_older_mcp_initializes_lists_and_calls`
   é o teste que segura isso.
 - **SLO do `hook --memory` (D-170):** medido pelo cronômetro do próprio hook, p95 de 9,5 a 9,9 ms
