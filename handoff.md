@@ -195,6 +195,17 @@ Os instrumentos estão prontos; as medições, não.
 - **SLO do `hook --memory` (D-170):** medido pelo cronômetro do próprio hook, p95 de 9,5 a 9,9 ms
   contra 10. A folga é de meio milissegundo, e quase todo o custo é a observação (admissão e
   gravação durável). Medido de novo com a T3.12: p95 de 9,6 a 9,8 ms e p99 de 10,0 ms em 5 rodadas.
+- **O hook não força mais o disco (D-174):** 81% daquele custo eram dois `sync_all` (arquivo e
+  diretório do spool), e o estado da sessão e a status line pagavam mais dois em todo hook. Agora
+  o hook grava por temporário e rename, sem forçar; o servidor e os comandos continuam forçando.
+  O acréscimo do `--memory` caiu para p95 de 1,9 a 2,0 ms. `tests/hook_durability.rs` conta os
+  syncs do processo (`state::forced_syncs`) e por isso tem um teste só: não acrescente outro
+  nesse arquivo. O que sobra de custo num hook com
+  análise é a consulta ao Ripwire, que cresce com o repositório: cerca de 160 ms num repositório
+  de 2 arquivos, 475 ms num de 2.573 e 1.030 ms num de 11.238. Um servidor vivo atendendo os
+  hooks pouparia de 75 a 100 ms por hook em qualquer tamanho (47%, 19% e 10%), não a consulta.
+  Com análises acima de 1 s, a janela de 1 s que segura edições seguidas (`edit_interval_ms`,
+  contada do início do hook) nunca fecha a tempo: num repositório grande toda edição é analisada.
 - **A chave:** `RIPWIRE_BROKER_JEV_API_KEY` guarda a credencial de um provider por vez: confira
   qual está lá antes de uma chamada real.
 - **Fase 6:** inteira. A política de falhar em CI com `strict=true` (§21.4) depende dela.

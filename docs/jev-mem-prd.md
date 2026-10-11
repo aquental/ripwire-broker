@@ -262,6 +262,8 @@ Diretório privado sob `StateStore::default_dir()/memory/<workspace_id>/`, fora 
 
 Usar spool de observações imutáveis por ID e um snapshot transacional versionado contendo nós, arestas, fila de enriquecimento, cursores, contadores e tombstones. Publicação: arquivo temporário privado no mesmo diretório, `sync_all`, rename e sincronização do diretório. Reutilizar o padrão de `state::write_private`, acrescentando durabilidade de diretório onde necessário; não assumir que seu rename atual sozinho cobre power loss. Readers veem geração completa anterior ou nova.
 
+**Exceção: o spool escrito por um hook (D-174).** O hook grava a observação por arquivo temporário e rename, sem `sync_all` do arquivo nem do diretório. O que protege a observação de uma queda de energia é a ingestão, que a põe no snapshot, e o snapshot é sempre forçado ao disco; forçar também o spool só decide quão cedo. Entre o hook e a ingestão, uma queda pode perder a observação ou deixar um arquivo vazio com o nome certo: a ingestão o rejeita, remove e segue. O servidor (`serve`) e os comandos continuam forçando o spool, e é por eles que entra a nota do agente (§5.2).
+
 Um writer por workspace com lock de arquivo; leitores não aguardam lock. Locks para consolidar snapshot não incluem rede, sumarizador ou upstream. Limites: 2.000 nós, 32.000 arestas, spool 1.000 entradas/16 MiB, snapshot 64 MiB, estado total 96 MiB por workspace. Saturação recusa novas admissões com métrica; não cresce sem limite. Índice invertido e adjacências em memória são reconstruídos do snapshot; manter snapshot carregado no processo longo.
 
 Spool publish confirma durabilidade; worker incorpora nó e job numa única nova geração, só então remove o spool. Crash antes da remoção repete ingestão de forma idempotente. Leitura pode devolver somente nós já incorporados, indicando `pending_writes`; não promete read-your-writes imediato.
@@ -316,8 +318,8 @@ Cache só de decisões, separado do cache semântico atual: chave inclui workspa
 
 | Operação | Meta / teto |
 |---|---|
-| Acréscimo local ao hook | p95 ≤10 ms, p99 ≤25 ms em release, disco local aquecido; sem rede |
-| Tentativa de publicação do spool | 25 ms de espera máxima na resposta; timeout declara `enqueue_unconfirmed`, não sucesso durável |
+| Acréscimo local ao hook | p95 ≤10 ms, p99 ≤25 ms em release, disco local aquecido; sem rede. O hook não força o disco (§7, D-174): medido, p95 de 1,9 a 2,0 ms |
+| Tentativa de publicação do spool | 25 ms de espera máxima na resposta; timeout declara `enqueue_unconfirmed`, não sucesso durável. "Confirmada" quer dizer forçada ao disco no servidor e nos comandos, e gravada e renomeada num hook (D-174) |
 | Worker por write | deadline 5.000 ms; até 4 tentativas HTTP totais por job, inclusive retries/splits |
 | Concorrência worker | 1 job remoto por workspace; compartilha teto global do processo de 4 requests com discovery/read |
 | Request de memória | ≤32 perguntas e ≤38.000 bytes serializados; dividir antes de enviar, sem cortar um par |
@@ -491,6 +493,8 @@ Rollback operacional: iniciar sem `--memory`; nenhuma coleta/consulta/inferênci
 - [Perguntas da implementação de referência](https://github.com/libingzheren/Jev-Mem/blob/main/memory/jev_questions.py) e [perfil Jev](https://github.com/libingzheren/Jev-Mem/blob/main/config/jev_mem.json): referências complementares; o broker mantém prompts/política próprios e não importa pipeline Python.
 - [API oficial TypeSafe](https://docs.typesafe.ai/api) e [OpenAPI](https://api.typesafe.ai/openapi.json), consultados em 03/10/2026, contrato de Noul/Choice. Disponibilidade real de Choice no modelo pinado será validada em teste de contrato sintético; não foi chamada API autenticada nesta revisão.
 - Base local: [Cargo.toml](../Cargo.toml), [Cargo.lock](../Cargo.lock), [toolchain](../rust-toolchain.toml), [CI Rust](../.github/workflows/rust.yml), [supply chain](../.github/workflows/supply-chain.yml), [README](../README.md), [PRD principal](../spec/ripwire-broker-mcp.md), [changelog](../spec/changelog.md) e fontes do §13.
+
+**v0.5, acréscimo (2026-10-10, D-174):** o hook deixa de forçar o disco ao gravar no spool (§7, §8.2). Nada mais muda.
 
 **v0.5 (2026-10-10, D-173):** decisão do mantenedor depois de o texto enriquecido não bastar (D-172). O §5.2 ganha a nota do agente na conclusão (`note` de `context_before_finish`, `host_supplied`, 500 bytes) e o molde enxuto da v2 (sem lista vazia, sem hash, sem limitações); o §4 amplia o consentimento de `--memory`. A barra de entrada do §10 não muda.
 

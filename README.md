@@ -440,9 +440,14 @@ unconfirmed, and no more than four such writes run at once. The status resource 
 and does not imply `--online`. The observation waits in the spool until a process with
 `--memory` incorporates it, so a hook that exits leaves nothing half done. `#ripwire-off` stops
 collection for that session only. Measured on a laptop in release, with the real ripwire and by
-the hook's own timers, the flag adds about 8 ms at the median and 9.5–9.9 ms at p95 to a hook of
-about 125 ms (the PRD's bar is 10 ms); p99 is 9.8–12.4 ms against a bar of 25
-([D-170](spec/changelog.md#d-170--o-slo-do-hook---memory-medido-pelo-próprio-hook)).
+the hook's own timers, the flag adds about 1.5 ms at the median and 1.9–2.0 ms at p95 (the PRD's
+bar is 10 ms); p99 is 2.0–3.2 ms against a bar of 25. It was about 8 ms and 9.5–9.9 ms while the
+hook forced each observation to disk
+([D-170](spec/changelog.md#d-170--o-slo-do-hook---memory-medido-pelo-próprio-hook),
+[D-174](spec/changelog.md#d-174--o-hook-não-força-o-disco)). A hook forces nothing to disk: an observation it
+spools is safe from a power loss once a server or `memory drain` has incorporated it, and one
+lost before that is recreated by the next analysis of the same file. The server and the `memory`
+commands still force what they write.
 
 **What is never kept:** the prompt, the transcript, a diff, a file's body, shell output or
 anything a model generated. A source the online policy refuses (`.env` and other sensitive

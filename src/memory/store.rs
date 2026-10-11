@@ -6,7 +6,9 @@
 //!
 //! Observations arrive in a spool of immutable files, one per node, written without a lock so a
 //! hook never waits. One writer at a time incorporates them into a new generation and only then
-//! removes them: a crash in between replays the spool, and a replay is the same node.
+//! removes them: a crash in between replays the spool, and a replay is the same node. A hook
+//! does not force its spool file to disk either (D-174): the generation that takes it in is
+//! forced, and a file a power loss left empty is rejected and removed.
 
 use super::consolidate::{self, Consolidation, Decided};
 use super::model::{Edge, EnrichmentState, Record, Rejected, Types};
@@ -249,6 +251,8 @@ pub struct Store {
     limits: Limits,
     /// `--memory-debug-log` (D-164): what this process does to the store, line by line.
     debug: Option<std::sync::Arc<super::debug::DebugLog>>,
+    /// Whether a spooled observation is forced to disk before `enqueue` returns.
+    forced_spool: bool,
 }
 
 impl Store {
@@ -275,6 +279,16 @@ impl Store {
             dir: state_dir.join("memory").join(workspace_id),
             limits,
             debug: None,
+            forced_spool: true,
+        }
+    }
+
+    /// This store, spooling without forcing the disk: for a hook, which holds the agent while
+    /// it writes (PRD jev-mem §8.2, D-174). Everything else the store writes stays forced.
+    pub fn unforced_spool(self) -> Self {
+        Self {
+            forced_spool: false,
+            ..self
         }
     }
 
@@ -361,7 +375,7 @@ impl Store {
         // would keep a warm copy (forgotten memories included) valid.
         if changes && recorded.is_some() {
             fs::remove_file(&path)
-                .and_then(|()| fs::File::open(&self.dir)?.sync_all())
+                .and_then(|()| crate::state::force(&fs::File::open(&self.dir)?))
                 .map_err(|_| Unavailable::Io)?;
         }
         crate::state::write_private(&self.dir, &self.dir.join(SNAPSHOT), bytes)
@@ -374,7 +388,7 @@ impl Store {
                 .map_err(|_| Unavailable::Io)?;
         }
         fs::File::open(&self.dir)
-            .and_then(|d| d.sync_all())
+            .and_then(|d| crate::state::force(&d))
             .map_err(|_| Unavailable::Io)?;
         Ok(())
     }
@@ -472,9 +486,14 @@ impl Store {
             }
         }
         between();
-        crate::state::write_private(&spool, &target, &bytes)
-            .and_then(|()| fs::File::open(&spool)?.sync_all())
-            .map_err(|_| Refusal::Unavailable(Unavailable::Io))?;
+        // An observation is safe from a power loss once ingestion has put it in the snapshot,
+        // which is always forced; forcing the spool too only decides how soon (D-174).
+        match self.forced_spool {
+            true => crate::state::write_private(&spool, &target, &bytes)
+                .and_then(|()| crate::state::force(&fs::File::open(&spool)?)),
+            false => crate::state::write_private_unforced(&spool, &target, &bytes),
+        }
+        .map_err(|_| Refusal::Unavailable(Unavailable::Io))?;
         // A `forget --all` that landed after the check above has already listed the spool: take
         // back what it could not see, so nothing the user erased comes back.
         if self.is_revoked() {
@@ -754,7 +773,7 @@ impl Store {
     fn forget_everything(&self, until_ms: u64) -> Result<usize, Refusal> {
         let _writer = self.writer()?;
         crate::state::write_private(&self.dir, &self.dir.join(REVOKED), b"")
-            .and_then(|()| fs::File::open(&self.dir)?.sync_all())
+            .and_then(|()| crate::state::force(&fs::File::open(&self.dir)?))
             .map_err(|_| Unavailable::Io)?;
         // Pending observations and every temporary go before the snapshot is read: a store that
         // cannot be read keeps its snapshot, never the text the user asked to erase.
@@ -850,7 +869,7 @@ impl Store {
             return Ok(false);
         }
         fs::remove_file(self.dir.join(REVOKED))
-            .and_then(|()| fs::File::open(&self.dir)?.sync_all())
+            .and_then(|()| crate::state::force(&fs::File::open(&self.dir)?))
             .map_err(|_| Unavailable::Io)?;
         Ok(true)
     }
@@ -1212,7 +1231,7 @@ impl Store {
         let out = change(&mut ledger);
         let bytes = serde_json::to_vec(&ledger).map_err(|_| Unavailable::Io)?;
         crate::state::write_private(&self.dir, &self.dir.join(QUOTA), &bytes)
-            .and_then(|()| fs::File::open(&self.dir)?.sync_all())
+            .and_then(|()| crate::state::force(&fs::File::open(&self.dir)?))
             .map_err(|_| Unavailable::Io)?;
         Ok(out)
     }

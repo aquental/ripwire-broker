@@ -147,7 +147,8 @@ impl StateStore {
     /// Written to a private temporary file and renamed: readers never see half a state.
     /// Concurrent hooks of one session: the last writer wins.
     pub fn save(&self, session_id: &str, state: &SessionState) -> std::io::Result<()> {
-        write_private(
+        // Not forced to disk (D-174): losing it costs a repeated injection, never the session.
+        write_private_unforced(
             &self.dir,
             &self.path(session_id),
             serde_json::to_string(state)?.as_bytes(),
@@ -207,7 +208,37 @@ fn create_temp(path: &Path) -> std::io::Result<(PathBuf, fs::File)> {
 /// the missing directories above it); one that exists is left exactly as it is, since it may be a
 /// directory the user owns for other reasons. A directory owned by another uid is refused. The
 /// file is 0600. A failed write leaves no temporary behind.
+///
+/// The file is forced to disk before the rename, so a power loss leaves the old file or the new
+/// one whole.
 pub(crate) fn write_private(dir: &Path, path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    write_private_as(dir, path, bytes, true)
+}
+
+/// [`write_private`] without forcing the file to disk (D-174): for what a hook writes at every
+/// event and the next one recreates. Forcing costs milliseconds each time (about 3.5 ms on
+/// APFS), and the hook holds the agent meanwhile. The rename still keeps readers from ever
+/// seeing half a file; only a power loss before the system writes it out can leave it empty,
+/// and every reader of such a file treats an empty one as absent.
+pub(crate) fn write_private_unforced(dir: &Path, path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    write_private_as(dir, path, bytes, false)
+}
+
+static FORCED_SYNCS: AtomicU64 = AtomicU64::new(0);
+
+/// How many times this process forced a file or a directory to disk: what a test reads to tell
+/// that a hook forces none.
+pub fn forced_syncs() -> u64 {
+    FORCED_SYNCS.load(Ordering::Relaxed)
+}
+
+/// Forces `file` (or the directory it is) to disk.
+pub(crate) fn force(file: &fs::File) -> std::io::Result<()> {
+    FORCED_SYNCS.fetch_add(1, Ordering::Relaxed);
+    file.sync_all()
+}
+
+fn write_private_as(dir: &Path, path: &Path, bytes: &[u8], forced: bool) -> std::io::Result<()> {
     fs::DirBuilder::new()
         .recursive(true)
         .mode(0o700)
@@ -217,7 +248,10 @@ pub(crate) fn write_private(dir: &Path, path: &Path, bytes: &[u8]) -> std::io::R
         .metadata()
         .and_then(|m| same_owner(fs::metadata(dir)?.uid(), m.uid()))
         .and_then(|()| file.write_all(bytes))
-        .and_then(|()| file.sync_all())
+        .and_then(|()| match forced {
+            true => force(&file),
+            false => Ok(()),
+        })
         .and_then(|()| fs::rename(&tmp, path));
     if written.is_err() {
         let _ = fs::remove_file(&tmp);
