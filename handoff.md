@@ -155,6 +155,111 @@ Os instrumentos estão prontos; as medições, não.
   sessões. O cache persistente de notas existe, opt-in (`--summarizer-cache`). Ele só serve ao
   `serve`: os hooks continuam sem notas, porque um hook não roda modelo.
 
+## Em andamento: a rodada da memória (T5.3), como continuar
+
+Estado em 2026-10-11 ([D-185](spec/changelog.md#d-185--o-ripwire-eval-mede-o-codex-e-leva-o-stop_reason-da-leitura-ao-registro),
+[D-186](spec/changelog.md#d-186--etapa-2-da-t53-o-braço-b-não-passa-no-gate-de-custo-o-classificador-recusa-metade-das-leituras),
+[D-187](spec/changelog.md#d-187--etapa-3-da-t53-a-rodada-do-codex-parou-no-limite-de-uso)): a etapa 2
+está feita e `--memory` não é promovido (braço B: tokens 0,99 de A, o gate pede 0,90). A etapa 3
+(Codex) ficou inconclusiva. Nada abaixo foi começado.
+
+### Onde está o material
+
+Tudo fora do repositório, **num diretório temporário que o sistema pode apagar**. Copie o que
+quiser guardar antes de continuar:
+
+```
+/private/tmp/claude-501/-Users-aquental-projects-ai-ripwire-broker/40e3c0e8-af65-4312-b1fd-5cf8b2fa7689/scratchpad/t53/
+```
+
+| Caminho | O que é |
+|---|---|
+| `corpus/corpus3.json` | o corpus da etapa 2: 30 sessões em 13 sequências |
+| `corpus/gen2.py`, `corpus/fx/` | o gerador do corpus e os arquivos de apoio das tarefas |
+| `corpus/analyse2.py` | a análise: `python3 corpus/analyse2.py SAIDA [--without ports,horizon]` |
+| `corpus/coldwarm.py` | a sonda de cache frio e quente |
+| `ceci_app/` | o clone usado como base (de `~/projects/ai/CECI/ceci_app`, commit `e685ac0`) |
+| `eval3/out` | etapa 2 (Claude Code), 286 linhas; `eval3/analysis-stage2.txt` é a análise |
+| `eval4/out` | etapa 3 (Codex), 60 linhas; `eval4/analysis.txt` |
+
+Nos comandos abaixo, `$T53` é esse diretório. O corpus guarda o caminho absoluto do clone em `repo`. Se o material mudar de lugar, gere o
+corpus de novo com `gen2.py` ou troque o caminho.
+
+### O que fazer, em ordem
+
+1. **Limpar a base do corpus.** No clone do `ceci_app`: tirar o diretório `graft/`, o bloco do
+   `AGENTS.md` que manda usar o graft e o job de CI que roda `graft check`; fazer um commit e
+   usar esse commit como `base` de todas as tarefas. Foi a causa das 12 sessões inválidas da
+   etapa 2.
+2. **Consertar o guarda de contaminação** (`src/eval/transcript.rs`), em TDD: ele casa o nome da
+   ferramenta em qualquer lugar do comando e marcou `cat ~/.agents/skills/ripwire-navigate/SKILL.md`
+   e `command -v graft`. Deve olhar o programa executado.
+3. **Isolar o Codex das skills do usuário.** `--ignore-user-config` não basta: o Codex lê
+   `~/.agents/skills/ripwire-*` e o `AGENTS.md` do usuário. Sem isso, a rodada do Codex mede as
+   skills junto com o broker. Caminho ainda não achado; tentar um `HOME` próprio para a sessão
+   (precisa da credencial do Codex nele) ou mover as skills durante a rodada.
+4. **Decidir a regra da nota maior que a parte da memória.** Uma nota com muitas fontes passa
+   dos 500 tokens e sai `budget_omitted` (`src/budget.rs`, `add_memories`). Proposta: cortar
+   `sources` antes de desistir da nota. Muda o contrato do D-184: decisão do mantenedor.
+5. **A pergunta de relevância do classificador.** É o que segura o gate de custo: o braço B
+   entregou 21 de 43 leituras com histórico relevante, e com entrega gasta 0,92 de A. A barra de
+   0,60 não é tocada (PRD jev-mem §10); o que se revê é a pergunta ("contém um fato necessário
+   para responder"), feita a uma instrução de trabalho. Sequências que recusaram mais: `overdue`
+   (3 de 3) e `scope` (4 de 6).
+6. **Refazer a etapa 2 nos braços A e B** depois dos itens 1, 4 e 5, com o binário novo. Um
+   braço não se compara com o A de outra rodada: os dois rodam juntos.
+7. **Refazer a etapa 3 (Codex)** depois dos itens 1 a 3 e com cota: a rodada de 60 sessões
+   esgotou o limite de uso da conta depois de cerca de 44 sessões.
+8. **Dois repositórios a mais.** O instrumento pede três; só o `ceci_app` foi medido.
+
+### Comandos
+
+Compilar e fixar os binários numa pasta (o `versions.json` da saída recusa binário trocado no
+meio de uma rodada):
+
+```sh
+cargo build --release --features online
+mkdir -p $T53/bin && cp target/release/ripwire-eval target/release/ripwire-broker $T53/bin/
+```
+
+Etapa 2 (Claude Code), cerca de 50 s e US$ 0,35 por sessão; a rodada é retomável, basta repetir
+o comando:
+
+```sh
+cd $T53 && bin/ripwire-eval run --corpus corpus/corpus3.json --out evalN/out \
+  --arms broker-online,broker-memory,broker-memory-deterministic --repeats 3 \
+  --broker $T53/bin/ripwire-broker --timeout-s 900 --shuffle 1 --memory-debug-log
+python3 corpus/analyse2.py evalN/out
+```
+
+Etapa 3 (Codex). **Antes, faça um backup de `~/.codex/config.toml`**: o Codex acrescenta uma
+entrada `[projects]` por diretório de trabalho, que depois precisa ser tirada à mão.
+
+```sh
+cp -p ~/.codex/config.toml ~/.codex/config.toml.bak-$(date +%Y%m%d-%H%M%S)
+cd $T53 && bin/ripwire-eval run --corpus corpus/corpus3.json --out evalM/out \
+  --arms broker-online,broker-memory --repeats 1 \
+  --broker $T53/bin/ripwire-broker --timeout-s 900 --shuffle 1 --memory-debug-log \
+  --agent-cmd 'codex exec --json --ignore-user-config --skip-git-repo-check --sandbox workspace-write -m gpt-6.1-sol -c model_reasoning_effort="medium" {codex_mcp}'
+```
+
+Precisa de `RIPWIRE_BROKER_JEV_API_KEY` no ambiente. Use uma saída (`--out`) nova por rodada.
+
+### Como ler o resultado
+
+Os gates do PRD jev-mem §14, na seção "sessões pareadas" da análise, linha "com histórico
+relevante": acerto do braço não abaixo de A; mediana de tokens até 0,90 de A; latência de
+`context_for_task` sem piora acima de 5%. Publicar sempre o intervalo de confiança e o destino
+de cada leitura (entregue, recusada, obsoleta, cortada pelo orçamento). Resultado novo vira
+entrada no `spec/changelog.md` e atualiza a T5.3 em `spec/plan/jev-mem-plan.md`.
+
+### Armadilhas desta rodada
+
+- Uma sequência cuja mudança atravessa a suíte de testes (`horizon`) custa 15 minutos e US$ 2
+  por sessão e não mede a memória. Rodar cada sequência nova uma vez antes da rodada paga.
+- O teste `the_report_separates_ingestion_retrieval_and_agent_latency_and_records_versions`
+  falha de vez em quando na CI por 1 ms (299 contra 300). Rodar o job de novo resolve.
+
 ## Pendências conhecidas, fora das medições
 
 - **Plugin do Claude Code:** as pendências do mantenedor no §5a do
