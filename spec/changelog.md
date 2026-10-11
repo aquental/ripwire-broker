@@ -124,6 +124,9 @@
 | 2026-10-11 04:10 | Sessões de controle do bloco C: num cenário feito para a memória importar, ela foi entregue em todas as sessões que a tinham e o agente fez o mesmo com e sem ela, nos dois hosts (Claude Code: desfez a mudança anterior, 3 de 3 e 3 de 3; Codex: manteve e corrigiu o teste, 2 de 2 e 2 de 2). Nenhum efeito achado; `--memory` segue experimental | [D-179](#d-179--sessões-de-controle-a-memória-chega-e-não-muda-o-que-o-agente-faz) |
 | 2026-10-11 05:20 | A descrição do campo `note` pede também o porquê da mudança. No cenário de controle do D-179, com a nota dizendo "at the user's request", o Claude Code deixou de desfazer a mudança anterior: 0 de 5 sessões com memória, contra 6 de 7 sem memória e 3 de 3 com a nota antiga. É a primeira medição em que a memória muda um resultado. No Codex o cenário não discrimina | [D-180](#d-180--a-nota-diz-por-quê-e-o-claude-code-deixa-de-desfazer-a-mudança) |
 | 2026-10-11 06:30 | Medido o risco do D-180: a nota que diz "at the user's request" não faz o agente hesitar diante de um pedido novo e legítimo de mudar o mesmo valor. Os dois hosts mudaram de imediato, com a nota no envelope ou sem ela (Claude Code 7 de 7, Codex 2 de 2), no mesmo número de passos; para esse pedido a própria leitura deixa a nota de fora (0,45) | [D-181](#d-181--a-nota-com-o-porquê-não-faz-o-agente-hesitar-diante-de-um-pedido-novo) |
+| 2026-10-11 15:20 | Etapa 3 da T5.3 (Codex 0.161.0, `gpt-6.1-sol`): rodada de 60 sessões **inconclusiva**. 16 sessões morreram no limite de uso da conta e 9 foram invalidadas pelo guarda de contaminação; sobraram 35 válidas e 4 pares com histórico relevante (tokens B/A 0,94, IC 0,65 a 1,04). Dois achados do instrumento: o guarda marca `cat ~/.agents/skills/ripwire-*/SKILL.md` e `command -v graft` como ferramenta de contexto, e o Codex lê as skills do usuário mesmo com `--ignore-user-config` | [D-187](#d-187--etapa-3-da-t53-a-rodada-do-codex-parou-no-limite-de-uso) |
+| 2026-10-11 14:10 | Etapa 2 da T5.3: rodada completa no `ceci_app`, 13 sequências (30 sessões), braços A, B e C, 3 repetições, 270 sessões, US$ 94,24. Acerto na última sessão: A 34/37, B 37/37, C 32/34. Tokens com histórico relevante, mediana contra A: B 0,99 (IC 0,87 a 1,07), C 0,89 (IC 0,82 a 1,02). O braço B entregou a memória em 21 de 43 leituras (17 recusadas pelo classificador, 5 obsoletas); com entrega, 0,92. Latência de `context_for_task` sem piora. Cache quente: a leitura de memória não tem cache (B/A 6,9 na chamada repetida). Uma nota com muitas fontes passa da parte da memória e é cortada. **`--memory` não é promovido** | [D-186](#d-186--etapa-2-da-t53-o-braço-b-não-passa-no-gate-de-custo-o-classificador-recusa-metade-das-leituras) |
+| 2026-10-11 10:30 | O `ripwire-eval` passa a medir o Codex, em TDD: lê o transcript de `codex exec --json` com as mesmas contagens e os mesmos motivos de invalidez, e entrega o braço na linha de comando (`{codex_mcp}` vira os `-c mcp_servers.…` do braço). O registro de cada sessão ganha `memory_stop_reasons`, o `stop_reason` de cada leitura de memória | [D-185](#d-185--o-ripwire-eval-mede-o-codex-e-leva-o-stop_reason-da-leitura-ao-registro) |
 | 2026-10-11 08:16 | Mudança de contrato do §10.9 do PRD jev-mem, em TDD: uma memória que cabe na parte dela (3 registros, 600 tokens, 20% do orçamento) entra mesmo com o orçamento cheio; cedem os itens de menor prioridade, primeiro o corpo do último e depois o item, contado em `budget.omitted`. Riscos e testes nunca cedem (CA-13) e o total nunca passa do orçamento. Conferência real no `ceci_app` (16 sessões, US$ 4,65): 4 notas aceitas pelo classificador, 4 entregues, nenhum `budget_omitted` (antes, 8 de 16 cortadas). O classificador recusou as outras 4 leituras: passa a ser a causa principal | [D-184](#d-184--a-memória-aceita-entra-no-orçamento-cedem-os-itens-de-menor-prioridade) |
 | 2026-10-11 04:12 | Etapa 1 da T5.3: avaliação reduzida no `ceci_app`, 10 sequências (22 sessões), braços A e B, 3 repetições, 132 sessões, US$ 44,47. Acerto na última sessão igual (A 25 de 29, B 23 de 27). Com a memória entregue, a sessão gasta 27% menos tokens e 13% menos tempo (mediana de 7 pares); no conjunto com histórico relevante a mediana cai 3%, abaixo dos 10% do gate, porque a memória chegou em 7 de 25 sessões. O classificador aceitou a nota em 16 leituras e o orçamento cortou 8 delas (`budget_omitted`): a estrutura enche os 2.500 tokens e a memória só leva a sobra. `--memory` não é promovido | [D-183](#d-183--etapa-1-da-t53-a-memória-entregue-corta-o-custo-mas-o-orçamento-a-tira-em-metade-das-leituras) |
 | 2026-10-11 02:00 | Etapa 0 da T5.3, em TDD: no `ripwire-eval`, `"continues": true` faz a sessão partir da árvore que a anterior deixou (commitada), o braço B drena a fila de memória entre sessões, `--shuffle SEED` sorteia a ordem dos braços, o registro ganha `position`, `finish_calls` e `finish_notes`, e `--memory-debug-log` guarda o log da memória ao lado do transcript. A fumaça no `ceci_app` achou um defeito: `context_for_task` com `mode: debug` e sem stack trace devolvia `upstream_refused` e a memória nem era lida; agora explora a tarefa, com a limitação `no_trace_frames`. E um resultado: nas 3 leituras feitas, a nota não foi entregue (a medida ficou em 0,59, contra a barra de 0,60) | [D-182](#d-182--etapa-0-da-t53-o-instrumento-encadeia-sessões-e-o-debug-sem-trace-explora) |
@@ -8740,3 +8743,118 @@ o braço A, depois disso.
 
 **Não feito.** Levar o `stop_reason` da leitura ao registro do `ripwire-eval`; reescrever `ports`;
 etapas 2 e 3 da T5.3.
+
+## D-185 — O `ripwire-eval` mede o Codex e leva o `stop_reason` da leitura ao registro
+
+**Contexto.** As etapas 2 e 3 da T5.3 pediam o braço C, a causa de cada leitura sem entrega e um
+segundo host. O instrumento só lia o transcript do Claude Code, e o `stop_reason` da leitura ficava
+só no log de debug.
+
+**Decisão.**
+
+- `transcript::summarize` reconhece os eventos de `codex exec --json` (`thread.started`,
+  `item.started`, `item.completed`, `turn.completed`, `turn.failed`) e os reduz ao mesmo `Summary`:
+  `command_execution` conta como `Bash`, `file_change` como `Edit`, `mcp_tool_call` como
+  `mcp__SERVIDOR__TOOL`. Os motivos de invalidez são os mesmos: servidor do braço que não
+  respondeu, turno que falhou ou não terminou, ferramenta de contexto rodada pelo shell.
+- Tokens do Codex: entrada é `input_tokens` menos `cached_input_tokens`; leitura de cache é
+  `cached_input_tokens`; criação de cache fica em 0, porque o Codex não a informa de modo que se
+  possa conferir. O Codex não informa custo: `cost_usd` fica vazio.
+- `Arm::codex_overrides` gera os pares `-c mcp_servers.NOME.command|args|env.VAR` a partir da
+  mesma configuração do braço, e `env_vars` para a credencial do Jev. No `--agent-cmd`, um
+  argumento igual a `{codex_mcp}` é trocado por esses pares.
+- `RunRecord.memory_stop_reasons` guarda o `stop_reason` de cada leitura, só nos braços com
+  memória.
+
+**Testes** (`tests/eval.rs`, seção "Codex"): `a_codex_transcript_is_reduced_to_the_same_counts`,
+`a_codex_session_that_never_reached_its_server_does_not_count_for_the_arm`,
+`a_codex_turn_that_failed_or_never_ended_is_invalid_not_zero`,
+`a_context_tool_run_from_a_codex_shell_is_contamination_too`,
+`the_stop_reason_of_each_memory_read_reaches_the_record`,
+`an_arm_is_given_to_codex_as_configuration_overrides`,
+`a_codex_run_gets_the_arm_on_its_command_line_and_is_recorded_like_any_other`,
+`an_arm_without_memory_records_no_stop_reasons`. 16 de 16 mutações mortas.
+
+**Limites.** `--ignore-user-config` tira os servidores MCP do `config.toml`, mas o Codex continua
+lendo `~/.agents/skills` e o `AGENTS.md` do usuário, e acrescenta uma entrada `[projects]` de
+confiança ao `~/.codex/config.toml` para cada diretório de trabalho. Nem
+`--enable skip_host_skill_discovery` nem um `-c projects…trust_level` evitaram isso.
+
+## D-186 — Etapa 2 da T5.3: o braço B não passa no gate de custo; o classificador recusa metade das leituras
+
+**Rodada.** `ceci_app`, 13 sequências (30 sessões), braços A (`broker-online`), B
+(`broker-memory`) e C (`broker-memory-deterministic`), 3 repetições, `--shuffle 1`, Claude Code
+2.1.296 (`claude-opus-5-5`), broker do `c156fde`. 270 sessões, US$ 94,24; 12 inválidas, 11 com
+histórico incompleto. Fora da análise: `ports` (cenário ruim, D-183) e `horizon` (ver abaixo).
+
+**Gates do §14.**
+
+| Gate | A | B | C |
+|---|---|---|---|
+| Acerto na última sessão | 34/37 (92%, Wilson 79 a 97) | 37/37 (100%, 91 a 100) | 32/34 (94%, 81 a 98) |
+| Tokens com histórico relevante, mediana contra A | — | 0,99 (IC 95% 0,87 a 1,07; n=41) | 0,89 (IC 0,82 a 1,02; n=39) |
+| Tempo da sessão, mediana contra A | — | 1,00 (IC 0,94 a 1,05) | 0,94 (IC 0,88 a 0,99) |
+| `context_for_task`, p50 da primeira chamada | 1.735 ms | 1.632 ms | 1.587 ms |
+
+Acerto e latência passam nos dois braços. O gate de custo (10%) não passa em B; em C passa na
+estimativa e o intervalo cruza 1,00. Fisher contra A: B p=0,24, C p=1,00.
+
+**Por que B não economiza.** A memória chega em metade das leituras com histórico relevante: 21
+entregues, 17 recusadas pelo classificador, 5 obsoletas (a fonte mudou). Com entrega, 0,92 (IC
+0,83 a 1,04; n=20); sem, 1,02. Nas nove sequências da etapa 1, medidas antes com o binário do
+D-184 (132 sessões, US$ 44,26), B dava 0,88 (IC 0,81 a 1,06; n=26) com 16 de 28 entregues; as
+quatro sequências novas derrubaram o número: `overdue` recusada 3 de 3, `scope` 4 recusadas e 2
+obsoletas em 6. C entrega 38 de 39, e também as 4 de memória irrelevante (1,10 contra A, n=4), que
+B recusa 5 de 5.
+
+**Onde a memória muda o acerto.** Só em `zero` (fato obsoleto): A 0/2, B 3/3, C 1/2.
+
+**Cache frio e quente.** Sonda à parte, 12 rodadas, um servidor, a mesma pergunta duas vezes:
+fria A 823 ms, B 789 ms; quente A 82 ms, B 561 ms (B/A 6,9). A leitura de memória não tem cache e
+pergunta ao Jev de novo. Na rodada o agente chama `context_for_task` uma vez por sessão (2
+repetições em 63 sessões B), então o efeito não aparece no gate de latência.
+
+**Nota maior que a parte da memória.** Em duas sessões (`horizon-2` em B, `crp-2` em C) a leitura
+saiu `budget_omitted` com 10 e 7 itens ainda no envelope. Não é o caso do D-184: em
+`add_memories` a nota é recusada quando `used + own > cap`, e `make_room` só falha sem itens. As
+notas vinham de sessões que mexeram em 9 e 11 arquivos, e cada arquivo é uma entrada em `sources`.
+O tamanho exato não foi medido (os stores temporários já não existiam). Falta decidir uma regra
+para esse caso, por exemplo cortar `sources` antes de desistir da nota.
+
+**Sessões inválidas.** As 12 são `graft` rodado pelo shell. O clone do `ceci_app` versiona um
+índice do graft, o `AGENTS.md` manda usá-lo e a CI roda `graft check`. Todas nas sequências
+antigas; nenhuma nas 90 sessões das novas.
+
+**`horizon`, descartada.** Mudar o horizonte de recorrência atravessa a suíte do calendário:
+sessões de 13 a 15 minutos, uma estourou os 900 s, outra custou US$ 2,33. Não mede a memória.
+
+**Limites da rodada.** Um repositório (o instrumento pede três); o braço C rodou depois de A e B
+nas nove sequências antigas, não embaralhado com eles; o histórico de cada braço são as próprias
+sessões.
+
+**Conclusão.** `--memory` não é promovido. O que segura é o classificador recusar nota relevante,
+não o valor da nota entregue.
+
+## D-187 — Etapa 3 da T5.3: a rodada do Codex parou no limite de uso
+
+**Rodada.** Mesmo corpus e mesma base, Codex 0.161.0 (`gpt-6.1-sol`, esforço médio), braços A e B,
+1 repetição, 60 sessões, pelo `ripwire-eval` do D-185.
+
+**Resultado: inconclusivo.** 25 sessões inválidas: 16 com "You've hit your usage limit" (`crp`,
+`scope` e `ddi` inteiras, nos dois braços) e 9 pelo guarda de contaminação. Sobraram 4 pares com
+histórico relevante: tokens B/A 0,94 (IC 0,65 a 1,04), 2 com entrega (0,75) e 2 sem (1,04).
+Acerto na última sessão: A 2/5, B 6/7 (Fisher p=0,22). Leituras com histórico relevante: 3
+entregues, 3 recusadas, 1 obsoleta. Nenhum gate pode ser lido com esse n.
+
+**Achados do instrumento.**
+
+- O guarda casa o nome da ferramenta em qualquer lugar do comando. Marcou
+  `cat ~/.agents/skills/ripwire-navigate/SKILL.md` (o Codex lendo uma skill do usuário) e
+  `command -v graft` como ferramenta de contexto rodada pelo shell. São falsos positivos do
+  guarda, mas a leitura das skills é contaminação de outro tipo: instruções do usuário que mandam
+  usar `ripwire` e `graft` entram na sessão avaliada.
+- A falha de cota é registrada como inválida, com o motivo, e não como zero.
+
+**Para refazer.** Cota do Codex disponível; base sem o índice do graft e sem o bloco do
+`AGENTS.md`; skills `ripwire-*` do usuário fora do alcance do Codex; guarda que olha o comando
+executado, não o texto inteiro.

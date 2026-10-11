@@ -2462,3 +2462,355 @@ fn the_memory_debug_log_is_asked_of_the_memory_arms_and_kept_beside_the_transcri
     let drain = log.lines().find(|l| l.contains(" memory drain ")).unwrap();
     assert!(drain.ends_with("--online --memory-debug-log"), "{drain}");
 }
+
+// --- Codex (`codex exec --json`) ---
+
+/// A session as Codex 0.161.0 wrote it (trimmed, paths shortened), one event every 100 ms of
+/// the runner's clock: items in place of messages, and one `turn.completed` with the usage.
+fn codex_session(items: Vec<Value>) -> Vec<(u64, Value)> {
+    let mut events = vec![
+        json!({"type": "thread.started", "thread_id": "01a12ad6"}),
+        json!({"type": "turn.started"}),
+    ];
+    events.extend(items);
+    events.push(
+        json!({"type": "turn.completed", "usage": {"input_tokens": 201_966,
+        "cached_input_tokens": 175_360, "cache_write_input_tokens": 0, "output_tokens": 859,
+        "reasoning_output_tokens": 11}}),
+    );
+    events
+        .into_iter()
+        .enumerate()
+        .map(|(n, e)| (n as u64 * 100, e))
+        .collect()
+}
+
+fn codex_item(id: &str, done: bool, body: Value) -> Value {
+    let mut item = body;
+    item["id"] = json!(id);
+    item["status"] = json!(if done { "completed" } else { "in_progress" });
+    json!({"type": if done { "item.completed" } else { "item.started" }, "item": item})
+}
+
+/// A shell command, started and completed.
+fn codex_shell(id: &str, line: &str) -> Vec<Value> {
+    let command = format!("/bin/zsh -lc {line}");
+    let body = |done: bool| {
+        json!({"type": "command_execution", "command": command,
+        "aggregated_output": "", "exit_code": if done { json!(0) } else { Value::Null }})
+    };
+    vec![
+        codex_item(id, false, body(false)),
+        codex_item(id, true, body(true)),
+    ]
+}
+
+/// A call to the broker, started and completed with `text` as its answer.
+fn codex_call(id: &str, tool: &str, arguments: Value, text: &str) -> Vec<Value> {
+    let body = |result: Value| {
+        json!({"type": "mcp_tool_call", "server": "ripwire-broker",
+        "tool": tool, "arguments": arguments, "result": result, "error": null})
+    };
+    vec![
+        codex_item(id, false, body(Value::Null)),
+        codex_item(
+            id,
+            true,
+            body(json!({"content": [{"type": "text", "text": text}], "structured_content": null})),
+        ),
+    ]
+}
+
+const CODEX_ENVELOPE: &str = r#"{"items":[{"path":"src/auth.py"}],"tests":[{"path":"tests/test_auth.py"}],"memories":[{"id":"m1"}],"provenance":{"memory":{"requests":2,"questions":3,"stop_reason":"classified"}}}
+
+Memories: one."#;
+
+#[test]
+fn a_codex_transcript_is_reduced_to_the_same_counts() {
+    let mut items = vec![json!({"type": "item.completed", "item": {"id": "item_0",
+        "type": "agent_message", "text": "I'll update the token lifetime."}})];
+    items.extend(codex_shell("item_1", "\"pwd; rg --files -g '*auth*'\""));
+    items.extend(codex_call(
+        "item_2",
+        "context_for_task",
+        json!({"task": "Change TOKEN_TTL_SECONDS"}),
+        CODEX_ENVELOPE,
+    ));
+    items.extend(codex_shell("item_3", "'cat src/auth.py'"));
+    let change = |done| {
+        codex_item(
+            "item_4",
+            done,
+            json!({"type": "file_change",
+                "changes": [{"path": "/work/src/auth.py", "kind": "update"}]}),
+        )
+    };
+    items.extend([change(false), change(true)]);
+    items.extend(codex_shell(
+        "item_5",
+        "'python3 -m pytest tests/test_auth.py'",
+    ));
+    items.extend(codex_call(
+        "item_6",
+        "context_before_finish",
+        json!({"note": "In src/auth.py, TOKEN_TTL_SECONDS went from 3600 to 7200."}),
+        "{}",
+    ));
+    let events = codex_session(items);
+    let last = events.last().unwrap().0;
+
+    let s = transcript::summarize(&events);
+
+    assert!(s.valid(), "{:?}", s.invalid);
+    assert_eq!(s.agent.as_deref(), Some("codex"));
+    // An item is one call, however many events tell of it.
+    assert_eq!(
+        (
+            s.calls.search,
+            s.calls.read,
+            s.calls.edit,
+            s.calls.mcp,
+            s.calls.other
+        ),
+        (1, 1, 1, 2, 1),
+        "{:?}",
+        s.calls
+    );
+    // `input_tokens` already holds the cached ones.
+    assert_eq!(s.tokens.total(), 201_966 + 859);
+    assert_eq!(s.tokens.cache_read, 175_360);
+    // Codex reports neither a cost nor a duration: the runner's clock at the end of the turn.
+    assert_eq!(s.cost_usd, 0.0);
+    assert_eq!(s.duration_ms, last);
+    // The file change starts at the 10th event.
+    assert_eq!(s.first_edit_ms, Some(900));
+    assert_eq!(s.presented_files, vec!["src/auth.py"]);
+    assert_eq!(s.presented_tests, vec!["tests/test_auth.py"]);
+    assert_eq!(s.mcp_result_bytes, (CODEX_ENVELOPE.len() + 2) as u64);
+    // From the call to its answer: one event later.
+    assert_eq!((s.context_calls, s.context_ms), (1, 100));
+    assert_eq!((s.finish_calls, s.finish_notes), (1, 1));
+    let read = s.memory_read.expect("the envelope carried a memory read");
+    assert_eq!(
+        (read.reads, read.requests, read.questions, read.delivered),
+        (1, 2, 3, 1)
+    );
+    assert_eq!(s.commands.len(), 3);
+    // Codex lists no servers: the one a call was answered by is the one that connected.
+    assert_eq!(s.mcp_servers, vec!["ripwire-broker"]);
+    assert_eq!(Arm::BrokerMemory.contamination(&s), None);
+    let none = Arm::None.contamination(&s).expect("a server in `none`");
+    assert!(none.contains("ripwire-broker"), "{none}");
+}
+
+#[test]
+fn a_codex_session_that_never_reached_its_server_does_not_count_for_the_arm() {
+    // No call at all: nothing says the server was there.
+    let quiet = transcript::summarize(&codex_session(codex_shell("item_1", "'cat src/auth.py'")));
+    assert!(quiet.valid(), "{:?}", quiet.invalid);
+    let why = Arm::BrokerOnline.contamination(&quiet).expect("absent");
+    assert!(why.contains("not connected"), "{why}");
+    assert_eq!(Arm::None.contamination(&quiet), None);
+
+    // A call that failed: the server was asked and did not answer.
+    let call = |done: bool, status: &str| {
+        let mut e = codex_item(
+            "item_1",
+            done,
+            json!({"type": "mcp_tool_call", "server": "ripwire-broker",
+                "tool": "context_for_task", "arguments": {"task": "x"}, "result": null,
+                "error": {"message": "tool call failed: Method not found"}}),
+        );
+        e["item"]["status"] = json!(status);
+        e
+    };
+    let failed = transcript::summarize(&codex_session(vec![
+        call(false, "in_progress"),
+        call(true, "failed"),
+    ]));
+    assert_eq!(failed.calls.mcp, 1);
+    assert_eq!(failed.context_calls, 0, "no answer to time");
+    let why = Arm::BrokerOnline.contamination(&failed).expect("failed");
+    assert!(why.contains("not connected (failed)"), "{why}");
+
+    // One answer is enough: a later call that fails does not take the server away.
+    let mut items = codex_call("item_0", "context_for_task", json!({"task": "x"}), "{}");
+    items.extend([call(false, "in_progress"), call(true, "failed")]);
+    let answered = transcript::summarize(&codex_session(items));
+    assert_eq!(Arm::BrokerOnline.contamination(&answered), None);
+}
+
+#[test]
+fn a_codex_turn_that_failed_or_never_ended_is_invalid_not_zero() {
+    let started = json!({"type": "thread.started", "thread_id": "t"});
+    let cut = transcript::summarize(&[(0, started.clone())]);
+    assert!(cut.invalid.as_deref().unwrap().contains("result"));
+
+    let failed = json!({"type": "turn.failed",
+        "error": {"message": "stream disconnected before completion"}});
+    let s = transcript::summarize(&[(0, started), (1, failed)]);
+    let why = s.invalid.expect("the arm did not fail; the API did");
+    assert!(why.contains("stream disconnected"), "{why}");
+}
+
+#[test]
+fn a_context_tool_run_from_a_codex_shell_is_contamination_too() {
+    let s = transcript::summarize(&codex_session(codex_shell(
+        "item_1",
+        "'graft ask \"where is the token checked\" --source'",
+    )));
+    assert_eq!(s.shell_tools, vec!["graft"]);
+    assert!(Arm::None.contamination(&s).unwrap().contains("graft"));
+}
+
+#[test]
+fn the_stop_reason_of_each_memory_read_reaches_the_record() {
+    let envelope = |stop: &str| {
+        format!(
+            r#"{{"items":[],"provenance":{{"memory":{{"requests":1,"questions":1,"stop_reason":"{stop}"}}}}}}"#
+        )
+    };
+    let mut items = codex_call(
+        "a",
+        "context_for_task",
+        json!({"task": "x"}),
+        &envelope("budget_omitted"),
+    );
+    items.extend(codex_call(
+        "b",
+        "context_after_edit",
+        json!({}),
+        &envelope("empty"),
+    ));
+    items.extend(codex_call("c", "context_before_finish", json!({}), "{}"));
+    let s = transcript::summarize(&codex_session(items));
+    assert_eq!(s.memory_stops, vec!["budget_omitted", "empty"]);
+}
+
+#[test]
+fn an_arm_is_given_to_codex_as_configuration_overrides() {
+    let tools = ripwire_broker::eval::arm::Tools {
+        broker: "/bin/r b".into(),
+        ripwire: "/bin/rw".into(),
+        memory_debug_log: false,
+    };
+    let (ws, st) = (Path::new("/wo\"rk"), Path::new("/state"));
+    assert!(Arm::None.codex_overrides(&tools, ws, st).is_empty());
+    // Each value is TOML, each override one argument after its `-c`: no shell, no splitting.
+    assert_eq!(
+        Arm::Broker.codex_overrides(&tools, ws, st),
+        vec![
+            "-c",
+            r#"mcp_servers.ripwire-broker.command="/bin/r b""#,
+            "-c",
+            r#"mcp_servers.ripwire-broker.args=["serve","--workspace","/wo\"rk","--ripwire","/bin/rw"]"#,
+        ]
+    );
+    let memory = Arm::BrokerMemory.codex_overrides(&tools, ws, st);
+    assert_eq!(
+        memory[4..],
+        [
+            "-c",
+            r#"mcp_servers.ripwire-broker.env.XDG_STATE_HOME="/state""#,
+            // Codex starts a server without the caller's environment: the credential is named.
+            "-c",
+            r#"mcp_servers.ripwire-broker.env_vars=["RIPWIRE_BROKER_JEV_API_KEY"]"#,
+        ]
+    );
+    let online = Arm::BrokerOnline.codex_overrides(&tools, ws, st);
+    assert_eq!(online.len(), 6);
+    assert!(online[5].contains("env_vars"), "{online:?}");
+}
+
+/// A stand-in for `codex exec --json`: its arguments go to `$ARGS`, one per line, and it calls
+/// the broker once, whose answer says how the memory read stopped.
+fn codex_agent(dir: &Path) -> std::path::PathBuf {
+    let path = dir.join("codex-agent");
+    common::write_executable(
+        &path,
+        r##"#!/bin/sh
+cat > /dev/null
+printf '%s\n' "$@" > "$ARGS"
+echo '{"type":"thread.started","thread_id":"t"}'
+echo '{"type":"item.started","item":{"id":"i1","type":"mcp_tool_call","server":"ripwire-broker","tool":"context_for_task","arguments":{"task":"login"},"result":null,"error":null,"status":"in_progress"}}'
+printf '%s\n' '{"type":"item.completed","item":{"id":"i1","type":"mcp_tool_call","server":"ripwire-broker","tool":"context_for_task","arguments":{"task":"login"},"result":{"content":[{"type":"text","text":"{\"items\":[],\"provenance\":{\"memory\":{\"requests\":1,\"questions\":2,\"stop_reason\":\"below_entry\"}}}"}]},"error":null,"status":"completed"}}'
+echo '{"type":"item.completed","item":{"id":"i2","type":"file_change","changes":[{"path":"src/auth.py","kind":"update"}],"status":"completed"}}'
+echo "# expired tokens are rejected" >> src/auth.py
+echo '{"type":"turn.completed","usage":{"input_tokens":10,"cached_input_tokens":4,"output_tokens":5}}'
+"##,
+    );
+    path
+}
+
+#[test]
+fn a_codex_run_gets_the_arm_on_its_command_line_and_is_recorded_like_any_other() {
+    let repo = common::sample_repo();
+    let head = git(repo.path(), &["rev-parse", "HEAD"]);
+    let work = tempfile::tempdir().unwrap();
+    let (agent, broker) = (codex_agent(work.path()), draining_broker(work.path()));
+    let corpus = work.path().join("corpus.json");
+    let tasks = json!([auth_task("login", repo.path(), &head, None)]);
+    std::fs::write(&corpus, json!({ "tasks": tasks }).to_string()).unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_ripwire-eval"))
+        .args(["run", "--corpus"])
+        .arg(&corpus)
+        .arg("--out")
+        .arg(work.path().join("out"))
+        .args(["--arms", "broker-memory", "--broker"])
+        .arg(&broker)
+        .arg("--agent-cmd")
+        .arg(format!("{} exec {{codex_mcp}} --json", agent.display()))
+        .env("ARGS", work.path().join("args"))
+        .env("LOG", work.path().join("log"))
+        .env("RIPWIRE_BROKER_JEV_API_KEY", "synthetic-not-a-credential")
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{out:?}");
+
+    let args = std::fs::read_to_string(work.path().join("args")).unwrap();
+    let args: Vec<&str> = args.lines().collect();
+    assert_eq!(args.len(), 10, "{args:?}");
+    assert_eq!((args[0], args[1], args[9]), ("exec", "-c", "--json"));
+    assert_eq!(
+        args[2],
+        format!(
+            r#"mcp_servers.ripwire-broker.command="{}""#,
+            broker.display()
+        )
+    );
+    assert!(
+        args[4].contains(r#"args=["serve","--workspace","#),
+        "{}",
+        args[4]
+    );
+    assert!(args[4].ends_with(r#""--memory"]"#), "{}", args[4]);
+    assert!(args[6].contains("env.XDG_STATE_HOME="), "{}", args[6]);
+
+    let results = std::fs::read_to_string(work.path().join("out/results.jsonl")).unwrap();
+    let r: Value = serde_json::from_str(results.lines().next().unwrap()).unwrap();
+    assert_eq!(r["valid"], true, "{r}");
+    assert_eq!(r["agent"], "codex");
+    assert_eq!(r["tokens"], 15);
+    assert_eq!(r["edit"], 1);
+    assert_eq!(r["memory_stop_reasons"], json!(["below_entry"]));
+    assert_eq!(r["memories_delivered"], 0);
+}
+
+#[test]
+fn an_arm_without_memory_records_no_stop_reasons() {
+    let repo = common::sample_repo();
+    let head = git(repo.path(), &["rev-parse", "HEAD"]);
+    let run = logged_run(
+        json!([auth_task("login", repo.path(), &head, None)]),
+        "broker",
+        "1",
+    );
+    assert!(
+        run[0]
+            .1
+            .get("memory_stop_reasons")
+            .is_none_or(Value::is_null),
+        "{}",
+        run[0].1
+    );
+}

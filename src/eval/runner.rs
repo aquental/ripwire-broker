@@ -355,6 +355,7 @@ fn record(task: &Task, arm: Arm, turn: Turn, s: &Summary, sc: &score::Score) -> 
         memory_retrieval_requests: memory(read.requests),
         memory_retrieval_questions: memory(read.questions),
         memories_delivered: memory(read.delivered),
+        memory_stop_reasons: arm.memory().then(|| s.memory_stops.clone()),
         memory_ingestion_attempts: None,
         memory_ingestion_questions: None,
         memory_jobs_left: None,
@@ -427,9 +428,14 @@ fn one(cfg: &RunConfig, task: &Task, arm: Arm, turn: Turn, dir: &Path) -> RunRec
         let argv: Vec<String> = cfg
             .agent
             .iter()
-            .map(|a| {
-                a.replace("{mcp_config}", &config.to_string_lossy())
-                    .replace("{workdir}", &work.to_string_lossy())
+            .flat_map(|a| {
+                if a == "{codex_mcp}" {
+                    return arm.codex_overrides(&cfg.tools, &work, &state);
+                }
+                vec![
+                    a.replace("{mcp_config}", &config.to_string_lossy())
+                        .replace("{workdir}", &work.to_string_lossy()),
+                ]
             })
             .collect();
         let transcripts = &logs;

@@ -218,6 +218,14 @@ Os instrumentos estão prontos; as medições, não.
   medição em que a memória muda um resultado. No Codex o cenário não discrimina: ele já mantinha
   a mudança sem memória. **O que segura a promoção agora** é a T5.3 (se isso vale fora de um
   cenário) e um caso que discrimine no Codex.
+- **Etapas 2 e 3 da T5.3 (D-185 a D-187): `--memory` não é promovido; o braço B não passa no
+  gate de custo.** Rodada completa no `ceci_app` (270 sessões, 13 sequências, braços A, B e C):
+  acerto A 34/37, B 37/37, C 32/34; tokens com histórico relevante B 0,99 (IC 0,87 a 1,07), C
+  0,89 (IC 0,82 a 1,02); latência sem piora. O classificador recusa metade das leituras
+  relevantes (21 entregues em 43); com entrega, 0,92. Uma nota com muitas fontes passa da parte
+  da memória e sai `budget_omitted`. O `ripwire-eval` lê o Codex (`{codex_mcp}`), mas a rodada do
+  Codex parou no limite de uso (4 pares válidos). Próximos pontos: a pergunta de relevância, a
+  regra para a nota grande, limpar o graft da base do corpus, refazer a etapa 3.
 - **A memória aceita entra no orçamento (D-184).** Contrato novo do §10.9: dentro da parte dela
   (3 registros, 600 tokens, 20%), a memória entra mesmo com o orçamento cheio e os itens de menor
   prioridade cedem, corpo primeiro; riscos e testes nunca. Conferência real: 4 notas aceitas, 4
