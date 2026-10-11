@@ -335,7 +335,7 @@ pub fn tools(online: bool) -> Vec<Tool> {
                 "budget_tokens": budget_schema(1800),
                 "include_test_commands": {"type": "boolean", "default": true, "description": "Include run commands when known."},
                 "strict": {"type": "boolean", "default": false, "description": "Also treat minor findings as blocking."},
-                "note": {"type": "string", "maxLength": 500, "description": "One or two sentences on what you changed: name the file and the symbol, and say what it now does differently, not only what was asked. For example: \"In src/cache.rs, get() now returns None for an entry older than MAX_AGE_SECONDS, which was lowered from 60 to 30.\" When the server runs with --memory it is kept for later sessions of this workspace and sent to the memory provider; otherwise it is ignored. No secrets, keys or personal data."},
+                "note": {"type": "string", "maxLength": 500, "description": "One or two sentences on what you changed: name the file and the symbol, say what it now does differently, and why (who asked for it, or what it fixes), so a later session does not undo it by mistake. For example: \"In src/cache.rs, get() now returns None for an entry older than MAX_AGE_SECONDS, lowered from 60 to 30 at the user's request to cut stale reads.\" When the server runs with --memory it is kept for later sessions of this workspace and sent to the memory provider; otherwise it is ignored. No secrets, keys or personal data."},
             }),
             &[],
         ),

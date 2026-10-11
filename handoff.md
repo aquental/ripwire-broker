@@ -210,8 +210,14 @@ Os instrumentos estão prontos; as medições, não.
   para a memória importar (um teste novo contradiz a mudança da sessão anterior). Com e sem
   memória, o Claude Code desfez a mudança anterior (3 de 3 e 3 de 3) e o Codex a manteve e
   corrigiu o teste (2 de 2 e 2 de 2). Nos dois braços o agente leu o histórico no git. A nota diz
-  o que mudou, não que a mudança foi pedida: é a primeira coisa a rever. **É o que segura a
-  promoção do `--memory` hoje**, mais do que a T5.3. Uma tool nova tem de ser alcançada
+  o que mudou, não que a mudança foi pedida.
+- **A nota diz por quê (D-180), e isso muda o que o Claude Code faz.** A descrição do campo pede
+  o motivo; a nota passou a trazer "at the user's request". No mesmo cenário, 0 de 5 sessões com
+  memória desfizeram a mudança (pararam, citaram a nota e perguntaram), contra 6 de 7 sem memória
+  e 3 de 3 com a nota antiga; e fizeram menos passos (mediana 5 contra 11,5). É a primeira
+  medição em que a memória muda um resultado. No Codex o cenário não discrimina: ele já mantinha
+  a mudança sem memória. **O que segura a promoção agora** é a T5.3 (se isso vale fora de um
+  cenário) e um caso que discrimine no Codex. Uma tool nova tem de ser alcançada
   pelos dois dialetos: `tests/mcp_surface.rs::a_client_of_an_older_mcp_initializes_lists_and_calls`
   é o teste que segura isso.
 - **SLO do `hook --memory` (D-170):** medido pelo cronômetro do próprio hook, p95 de 9,5 a 9,9 ms

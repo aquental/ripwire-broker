@@ -490,8 +490,10 @@ atualizado (archify fora desta sessão).
   0.161.0 não alcançava as tools do servidor; com o [D-177](../changelog.md#d-177--o-servidor-atende-clientes-de-um-mcp-anterior) alcança e escreve a nota (2 de 2),
   mas a nota dele não foi entregue na sessão seguinte (0,33). Com a redação do [D-178](../changelog.md#d-178--a-descrição-da-nota-diz-o-que-escrever), a nota
   dos dois hosts é entregue (4 de 4 rodadas). As sessões de controle ([D-179](../changelog.md#d-179--sessões-de-controle-a-memória-chega-e-não-muda-o-que-o-agente-faz)) não acharam
-  diferença no que o agente faz com e sem memória, nos dois hosts. A tarefa continua aberta, e o
-  que ela pede agora é uma decisão: o CA-15 quer o host **usando** a memória.
+  diferença no que o agente faz com e sem memória, nos dois hosts. Com a nota dizendo por quê
+  ([D-180](../changelog.md#d-180--a-nota-diz-por-quê-e-o-claude-code-deixa-de-desfazer-a-mudança)), o Claude Code passou a agir sobre a memória (0 de 5 desfizeram a mudança, contra
+  6 de 7 sem memória); no Codex não havia o que medir nesse cenário. Faltam um cenário que
+  discrimine no Codex e as fixtures. A tarefa continua aberta.
   **Docs:** `integrations/`, skill, README.
 - [x] **T3.12 · Renderizador `memory-observation/v2`** (PRD v0.4 §5.2,
   [D-171](../changelog.md#d-171--a-leitura-recusa-as-observações-automáticas-prd-v04)). CA-3, CA-12.
