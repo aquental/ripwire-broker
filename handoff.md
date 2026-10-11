@@ -201,8 +201,11 @@ Os instrumentos estão prontos; as medições, não.
   `resources/*` sem o `_meta` por pedido, pelo gancho de pedidos fora do protocolo do SDK e pelos
   mesmos tratadores. Com isso o Codex chama as três tools e escreve a nota (2 de 2 sessões).
   **A nota do Codex não foi entregue** (0,33 contra 0,60; a do Claude Code teve 0,67): a entrega
-  depende de como o agente redige a nota, e as que passaram dizem qual símbolo passou a se
-  comportar como. É o ponto fraco conhecido da memória hoje. Uma tool nova tem de ser alcançada
+  depende de como o agente redige a nota. O D-178 pôs na descrição do campo o que escrever
+  (arquivo, símbolo, o que ele passou a fazer) e um exemplo; com isso as notas dos dois hosts
+  foram entregues em 4 de 4 rodadas (0,65 a 0,81). O exemplo molda a nota: as quatro começaram
+  por "In src/auth.py,". Foi medido numa tarefa e num repositório pequeno; a T5.3 é quem diz se
+  vale em geral. O que continua sem demonstração é o agente **usar** a memória. Uma tool nova tem de ser alcançada
   pelos dois dialetos: `tests/mcp_surface.rs::a_client_of_an_older_mcp_initializes_lists_and_calls`
   é o teste que segura isso.
 - **SLO do `hook --memory` (D-170):** medido pelo cronômetro do próprio hook, p95 de 9,5 a 9,9 ms

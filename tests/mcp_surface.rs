@@ -128,6 +128,15 @@ async fn publishes_three_read_only_tools_and_a_status_resource() {
                 assert!(says.starts_with("One or two sentences"), "{says}");
                 let tool = t.description.as_deref().unwrap_or_default();
                 assert!(tool.contains("If you changed code, pass `note`"), "{tool}");
+                // What the read accepts is a note that names the symbol and says what it now
+                // does (D-178); one that only restates the request is not delivered.
+                assert!(
+                    says.contains("name the file and the symbol")
+                        && says.contains("what it now does differently")
+                        && says.contains("For example"),
+                    "{says}"
+                );
+                assert!(tool.contains("what it now does differently"), "{tool}");
             }
             _ => assert!(note.is_null(), "{}", t.name),
         }
