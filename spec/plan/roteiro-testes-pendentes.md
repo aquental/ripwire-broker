@@ -211,9 +211,11 @@ $B memory add --workspace "$W" --file ../note.json
 | Codex 0.161.0, com o D-177 | sim, 2 de 2 | não (`kept=0`, 0,33) | — |
 | Claude Code 2.1.296, com a redação do D-178 | sim, 2 de 2 | sim, 2 de 2 (0,71 e 0,81) | não demonstrado |
 | Codex 0.161.0, com a redação do D-178 | sim, 2 de 2 | sim, 2 de 2 (0,79 e 0,65) | não demonstrado |
+| Claude Code 2.1.296, sessões de controle (D-179) | sim | sim, 3 de 3 | **sem diferença**: reverteu a mudança anterior em 3 de 3 com memória e 3 de 3 sem |
+| Codex 0.161.0, sessões de controle (D-179) | sim | sim, 2 de 2 | **sem diferença**: corrigiu o teste em 2 de 2 com memória e 2 de 2 sem |
 
-O que falta neste bloco: uma sessão de controle sem memória, para dizer se o comportamento do
-dos hosts muda (nos dois a memória chega e não é citada); e as fixtures em
+As sessões de controle foram rodadas ([D-179](../changelog.md#d-179--sessões-de-controle-a-memória-chega-e-não-muda-o-que-o-agente-faz)) e não acharam diferença. O que falta
+neste bloco: decidir o que fazer com esse resultado antes de gravar as fixtures em
 `tests/memory_hosts.rs`. No Codex, o `install codex --write` só imprime o bloco do
 `~/.codex/config.toml`: é preciso acrescentá-lo à mão.
 

@@ -121,6 +121,7 @@
 | 2026-10-11 00:30 | Bloco C do roteiro rodado. O Claude Code 2.1.296 não escrevia a nota: a descrição do campo começava por "With --memory only", e o agente não sabe se o servidor guarda memória. A descrição da tool passa a pedir a nota, e o agente a escreveu em 2 de 2 sessões; a nota voltou na sessão seguinte (0,67). O uso da memória não ficou demonstrado. O Codex 0.161.0 não alcança as tools do servidor: ele recusa `initialize` | [D-176](#d-176--bloco-c-o-claude-code-escreve-a-nota-quando-a-tool-pede-o-codex-não-fala-com-o-servidor) |
 | 2026-10-11 02:10 | O servidor passa a atender clientes de um MCP anterior ao `2026-07-28`: `initialize`, `ping`, `tools/list`, `tools/call`, `resources/list` e `resources/read` sem o `_meta` por pedido, pelos mesmos tratadores, com o mesmo cancelamento. Com isso o Codex 0.161.0 chama as três tools e escreve a nota; a nota dele não foi entregue na sessão seguinte (0,33) | [D-177](#d-177--o-servidor-atende-clientes-de-um-mcp-anterior) |
 | 2026-10-11 03:00 | A descrição do campo `note` passa a dizer o que escrever (o arquivo, o símbolo e o que ele passou a fazer) e traz um exemplo. Com isso as notas escritas pelo Claude Code e pelo Codex foram entregues na sessão seguinte em 4 de 4 rodadas (0,65 a 0,81); antes, a do Codex tinha tido 0,33 | [D-178](#d-178--a-descrição-da-nota-diz-o-que-escrever) |
+| 2026-10-11 04:10 | Sessões de controle do bloco C: num cenário feito para a memória importar, ela foi entregue em todas as sessões que a tinham e o agente fez o mesmo com e sem ela, nos dois hosts (Claude Code: desfez a mudança anterior, 3 de 3 e 3 de 3; Codex: manteve e corrigiu o teste, 2 de 2 e 2 de 2). Nenhum efeito achado; `--memory` segue experimental | [D-179](#d-179--sessões-de-controle-a-memória-chega-e-não-muda-o-que-o-agente-faz) |
 | 2026-10-06 15:52 | A barra mostra o servidor vivo do workspace: `[jev:N]` (requisições ao Jev), com `--memory` `[mem: retr N, stor M]` (leituras e gravações da memória), nos últimos 5 s, e `(online)` no fim; um arquivo por processo `serve`, renovado a cada 10 s e ignorado depois de 30 s | [D-154](#d-154--o-servidor-na-barra-jev-memória-e-online) |
 | 2026-10-06 15:15 | Repositório migrado da organização `CeciApp` para a conta `aquental`: remoto `origin` atualizado, URLs do diagrama de arquitetura trocadas, histórico (D-054, D-055) mantido | [D-153](#d-153--migração-do-repositório-para-aquental) |
 | 2026-10-05 00:30 | Achados baixos da memória, segunda parte, e do eval, em TDD: lease só sai livre e `finish` velho não assenta nada, somas da quota saturam, `memory retry` alcança jobs adiados, ingest perto do teto toma o que cabe, pânico do worker dito (grupo 3); guarda de shell que vê opções, palavras-chave, `-lc`, `xargs` e `find -exec`, `{repo}`/`{fix}` como uma palavra, `spent` só em braço com memória, ids de tarefa recusados, CLI do `ripwire-eval`, `history_incomplete` fora das médias, sessão cortada pela API inválida e prompt longo que segurava o timeout (grupo 3) | [D-151](#d-151--achados-baixos-da-memória-segunda-parte-e-do-eval) |
@@ -8349,3 +8350,64 @@ automáticas dos mesmos stores ficaram entre 0,20 e 0,36, todas recusadas.
 **Verificação.** Vermelho: `tests/mcp_surface.rs::publishes_three_read_only_tools_and_a_status_resource`
 exige as três partes na descrição do campo e a frase na da tool. Portões: 851
 (5 ignorados) e 889 (8 ignorados), fmt e os dois clippy limpos.
+
+## D-179 — Sessões de controle: a memória chega e não muda o que o agente faz
+
+**A pergunta** que ficou do D-176 e do D-178: o agente recebe a memória; ele a usa?
+
+**O cenário**, feito para a memória importar. Sessão 1 (com `--memory`): "In src/auth.py change
+TOKEN_TTL_SECONDS to 900."; o agente muda e deixa a nota. Entre as sessões, um teste que
+contradiz a mudança entra no repositório (`test_session_survives_half_an_hour`: um token de 1.800
+s ainda é válido) e tudo é commitado como `wip`. Sessão 2: "The test
+test_session_survives_half_an_hour in tests/test_auth.py is failing. Make the test suite pass."
+Há duas saídas: desfazer a mudança da sessão 1 (voltar o TTL a 3600) ou corrigir o teste. Quem
+sabe que o TTL foi baixado de propósito deveria corrigir o teste.
+
+**Os braços.** O mesmo repositório e o mesmo store, restaurados de uma cópia antes de cada
+sessão 2; o servidor com `--online --memory` ou só com `--online`. Mesmas tools, mesmo prompt.
+
+**As notas** que as sessões 1 deixaram:
+
+- Claude Code: "In src/auth.py, TOKEN_TTL_SECONDS was lowered from 3600 to 900, so
+  validate_token() now rejects tokens older than 15 minutes instead of 1 hour."
+- Codex: "In src/auth.py, TOKEN_TTL_SECONDS is now 900, reducing token lifetime from one hour to
+  fifteen minutes."
+
+**Resultado.**
+
+| Host | Braço | Sessões | Memória entregue | O que o agente fez |
+|---|---|---|---|---|
+| Claude Code 2.1.296 | com memória | 3 | 3 de 3 (`kept=1`) | voltou o TTL a 3600, 3 de 3 |
+| Claude Code 2.1.296 | sem memória | 3 | — | voltou o TTL a 3600, 3 de 3 |
+| Codex 0.161.0 | com memória | 2 | 2 de 2 (`kept=1`) | manteve 900 e corrigiu o teste, 2 de 2 |
+| Codex 0.161.0 | sem memória | 2 | — | manteve 900 e corrigiu o teste, 2 de 2 |
+
+Cada host fez a mesma coisa nos dois braços. O número de passos também não mudou de modo que se
+distinga do ruído (Claude Code: 10 a 12 chamadas com memória, 13 sem; Codex: 12 e 14 com, 11 e 15
+sem). Nenhuma resposta final citou a memória. Numa das do Codex com memória aparece "preserving
+the intentional 15-minute TTL"; nas outras três do Codex, "preserving the 900-second TTL" ou "the
+15-minute TTL".
+
+**O que se vê nas transcrições.**
+
+- Nos dois braços o agente foi ao `git log -p` e leu ali que o TTL tinha mudado. A memória dizia a
+  mesma coisa e não poupou essa ida.
+- O Claude Code tratou o teste como a intenção e desfez a mudança, avisando que, se a redução
+  tinha sido deliberada, o certo era o contrário. A nota diz o que mudou e não diz que a mudança
+  foi pedida.
+
+**O que isso mostra e o que não mostra.** Num cenário, com 3 e 2 sessões por braço, não apareceu
+efeito da memória no que o agente faz. Não mostra que não há efeito em outros casos. Três coisas
+do cenário pesam contra a memória e são reais no uso: o histórico do git está à mão; o prompt
+manda fazer o teste passar; a mudança e o teste estão no mesmo commit, o que os faz parecer
+igualmente intencionais.
+
+**Consequência.** O CA-15 pede o host usando a memória. Hoje a memória é escrita, guardada,
+escolhida e entregue nos dois hosts (D-176 a D-178), e não há medição em que ela mude um
+resultado. `--memory` segue experimental, e este achado é o que segura a promoção, antes da
+T5.3. Caminhos a decidir, sem ordem: a nota registrar por que a mudança foi feita, e não só o que
+mudou; a memória chegar com uma instrução de uso no envelope; ou aceitar que o valor está em
+casos sem histórico no git (decisões que não viram commit) e medir esses.
+
+**Custo.** Sete sessões do Claude Code, US$ 1,53, e cinco do Codex na conta do mantenedor. Só
+documentos mudam nesta entrada.

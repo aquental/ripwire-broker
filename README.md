@@ -557,7 +557,14 @@ stay in the JSON either way). `#ripwire-off` stops injection for that session on
   delivered in 4 of 4 runs: 0.71 and 0.81 on Claude Code, 0.79 and 0.65 on Codex. One task, one
   small repository.
 
-Neither host counts as consuming memory yet ([plan](spec/plan/jev-mem-plan.md), T3.11).
+- **No effect on what the agent does was found** ([D-179](spec/changelog.md#d-179--sessões-de-controle-a-memória-chega-e-não-muda-o-que-o-agente-faz)).
+  In a task built so that knowing the earlier change should matter (a new test contradicts it),
+  the memory was delivered in every session that had it, and each host did the same thing with
+  and without it: Claude Code undid the earlier change in 3 of 3 sessions either way, Codex kept
+  it and fixed the test in 2 of 2 either way. Both read the history from git in both arms. One
+  scenario, few runs: it shows no effect here, not that there is none.
+
+Neither host counts as consuming memory ([plan](spec/plan/jev-mem-plan.md), T3.11).
 
 #### Following memory live
 

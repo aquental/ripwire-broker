@@ -489,8 +489,9 @@ atualizado (archify fora desta sessão).
   de a descrição da tool pedi-la) e a recebe de volta; se a **usa**, não ficou demonstrado. Codex
   0.161.0 não alcançava as tools do servidor; com o [D-177](../changelog.md#d-177--o-servidor-atende-clientes-de-um-mcp-anterior) alcança e escreve a nota (2 de 2),
   mas a nota dele não foi entregue na sessão seguinte (0,33). Com a redação do [D-178](../changelog.md#d-178--a-descrição-da-nota-diz-o-que-escrever), a nota
-  dos dois hosts é entregue (4 de 4 rodadas). Falta mostrar que o agente a **usa**, com uma sessão
-  de controle, e gravar as fixtures. A tarefa continua aberta.
+  dos dois hosts é entregue (4 de 4 rodadas). As sessões de controle ([D-179](../changelog.md#d-179--sessões-de-controle-a-memória-chega-e-não-muda-o-que-o-agente-faz)) não acharam
+  diferença no que o agente faz com e sem memória, nos dois hosts. A tarefa continua aberta, e o
+  que ela pede agora é uma decisão: o CA-15 quer o host **usando** a memória.
   **Docs:** `integrations/`, skill, README.
 - [x] **T3.12 · Renderizador `memory-observation/v2`** (PRD v0.4 §5.2,
   [D-171](../changelog.md#d-171--a-leitura-recusa-as-observações-automáticas-prd-v04)). CA-3, CA-12.
