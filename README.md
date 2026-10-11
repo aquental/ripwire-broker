@@ -545,10 +545,11 @@ stay in the JSON either way). `#ripwire-off` stops injection for that session on
   `memories` (relevance 0.67). Before that sentence was there it wrote none: an agent only reads
   what the server tells it. Whether it *uses* a memory is not shown: it received one and did not
   cite it, and nothing in what it did can be told apart from a session without memory.
-- **Codex 0.161.0** does not reach the server's tools at all, with or without memory. The server
-  speaks only the stateless MCP of `2026-07-28` and refuses the `initialize` handshake; Codex
-  listed the server and its agent reported the tools as unavailable. The Codex hooks are separate
-  commands and are not affected. This is a gap of the server, not of memory.
+- **Codex 0.161.0** calls the three tools and writes the note, in 2 of 2 sessions, since the
+  server answers the `initialize` handshake of an older MCP ([D-177](spec/changelog.md#d-177--o-servidor-atende-clientes-de-um-mcp-anterior)).
+  Before that it could not reach the tools at all. The note it wrote was not delivered to the
+  next session: "Changed TOKEN_TTL_SECONDS from 3600 to 900 as requested, shortening token
+  validity to 15 minutes." scored 0.33 against the bar of 0.60. One run.
 
 Neither host counts as consuming memory yet ([plan](spec/plan/jev-mem-plan.md), T3.11).
 

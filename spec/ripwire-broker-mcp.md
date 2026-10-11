@@ -397,6 +397,15 @@ Ripwire, validação dos verbos obrigatórios e testes contra o binário real
 ([D-002](changelog.md#d-002--compatibilidade-de-protocolo-sdk--ripwire),
 [D-012](changelog.md#d-012--toolslist-contra-servidor-pré-2026)).
 
+**Com o host**, o servidor atende os dois dialetos ([D-177](changelog.md#d-177--o-servidor-atende-clientes-de-um-mcp-anterior)). O SDK só implementa o
+`2026-07-28`; um cliente de um MCP anterior (`2025-11-25`, `2025-06-18`, `2025-03-26`,
+`2024-11-05`) abre com `initialize` e manda os pedidos sem o `_meta` por pedido, e o SDK entrega
+todos esses ao tratador de pedidos fora do protocolo. Ali o broker responde `initialize` (com a
+versão pedida, ou a mais nova das anteriores quando não a conhece), `ping`, `tools/list`,
+`tools/call`, `resources/list` e `resources/read`, pelos mesmos tratadores que um cliente novo
+alcança: as tools, as respostas e o cancelamento são os mesmos. Outro método recebe `-32601` com o
+nome dele.
+
 ### 7.5 Stack de implementação
 
 O `ripwire-broker` será implementado em **Rust** com

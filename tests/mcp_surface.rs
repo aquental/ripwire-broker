@@ -489,6 +489,172 @@ impl Drop for Raw {
     }
 }
 
+/// D-177: a host that speaks an MCP older than 2026-07-28 (Codex 0.161) opens with `initialize`
+/// and sends its requests without the per-request `_meta`. It gets the same tools.
+#[test]
+fn a_client_of_an_older_mcp_initializes_lists_and_calls() {
+    let (ws, bin) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let ripwire = common::slow_ripwire(bin.path());
+    let mut broker = Raw::start(&[
+        "--workspace",
+        ws.path().to_str().unwrap(),
+        "--ripwire",
+        ripwire.to_str().unwrap(),
+    ]);
+    let classic = |id: i64, method: &str, params: Value| json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params});
+    let soon = std::time::Duration::from_secs(10);
+    let mut ask = |id: i64, method: &str, params: Value| {
+        broker.send(classic(id, method, params));
+        broker
+            .response(id, soon)
+            .unwrap_or_else(|| panic!("{method} is answered"))
+    };
+
+    let hello = ask(
+        1,
+        "initialize",
+        json!({
+            "protocolVersion": "2025-06-18", "capabilities": {},
+            "clientInfo": {"name": "older", "version": "0"},
+        }),
+    );
+    let result = &hello["result"];
+    assert_eq!(
+        result["protocolVersion"], "2025-06-18",
+        "the version asked: {hello}"
+    );
+    assert_eq!(result["serverInfo"]["name"], "ripwire-broker", "{hello}");
+    assert!(result["capabilities"]["tools"].is_object(), "{hello}");
+    assert!(result["capabilities"]["resources"].is_object(), "{hello}");
+    assert!(
+        result["instructions"]
+            .as_str()
+            .is_some_and(|i| i.contains("context_for_task")),
+        "the same instructions as `server/discover`: {hello}"
+    );
+    // A version the server never heard of is answered with the newest older one it speaks.
+    let newer = ask(
+        2,
+        "initialize",
+        json!({"protocolVersion": "2099-01-01", "capabilities": {}, "clientInfo": {"name": "x", "version": "0"}}),
+    );
+    assert_eq!(newer["result"]["protocolVersion"], "2025-11-25", "{newer}");
+
+    assert!(ask(3, "ping", json!({}))["result"].is_object());
+    let listed = ask(4, "tools/list", json!({}));
+    let names: Vec<&str> = listed["result"]["tools"]
+        .as_array()
+        .expect("tools")
+        .iter()
+        .filter_map(|t| t["name"].as_str())
+        .collect();
+    assert_eq!(
+        names,
+        [
+            "context_for_task",
+            "context_after_edit",
+            "context_before_finish"
+        ],
+        "{listed}"
+    );
+
+    // With no `_meta`, and with one that holds only what an older client puts there.
+    for (id, meta) in [(5, None), (6, Some(json!({"progressToken": 6})))] {
+        let mut params = json!({"name": "context_for_task", "arguments": {"task": format!("task {id}"), "mode": "orient"}});
+        if let Some(meta) = meta {
+            params["_meta"] = meta;
+        }
+        let called = ask(id, "tools/call", params);
+        let out = &called["result"];
+        assert_eq!(out["isError"], false, "{called}");
+        assert_eq!(
+            out["structuredContent"]["tool"], "context_for_task",
+            "{called}"
+        );
+        assert!(out["content"][0]["text"].is_string(), "{called}");
+    }
+    let refused = ask(
+        7,
+        "tools/call",
+        json!({"name": "no_such_tool", "arguments": {}}),
+    );
+    assert_eq!(refused["result"]["isError"], true, "{refused}");
+
+    let resources = ask(8, "resources/list", json!({}));
+    assert_eq!(
+        resources["result"]["resources"][0]["uri"], "ripwire-broker://status",
+        "{resources}"
+    );
+    let status = ask(
+        9,
+        "resources/read",
+        json!({"uri": "ripwire-broker://status"}),
+    );
+    let text = status["result"]["contents"][0]["text"]
+        .as_str()
+        .expect("status");
+    let status: Value = serde_json::from_str(text).unwrap();
+    assert_eq!(
+        status["inflight"],
+        json!({"tracked_calls": 0, "early_cancels": 0}),
+        "an older client's calls leave nothing behind either"
+    );
+
+    let unknown = ask(10, "prompts/list", json!({}));
+    assert_eq!(unknown["error"]["code"], -32601, "{unknown}");
+    assert!(
+        unknown["error"]["message"]
+            .as_str()
+            .is_some_and(|m| m.contains("prompts/list")),
+        "names the method: {unknown}"
+    );
+}
+
+/// The same cancellation, from a client of an older MCP.
+#[test]
+fn an_older_client_can_cancel_its_call() {
+    let (ws, bin) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let ripwire = common::slow_ripwire(bin.path());
+    let mut broker = Raw::start(&[
+        "--workspace",
+        ws.path().to_str().unwrap(),
+        "--ripwire",
+        ripwire.to_str().unwrap(),
+    ]);
+    broker.send(json!({
+        "jsonrpc": "2.0", "id": 1, "method": "initialize",
+        "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "older", "version": "0"}},
+    }));
+    broker
+        .response(1, std::time::Duration::from_secs(10))
+        .expect("initialize is answered");
+    broker.send(json!({"jsonrpc": "2.0", "method": "notifications/initialized"}));
+    broker.send(json!({
+        "jsonrpc": "2.0", "id": 7, "method": "tools/call",
+        "params": {"name": "context_for_task", "arguments": {"task": "slow task", "mode": "orient"}},
+    }));
+    let busy = bin.path().join("busy");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while !busy.exists() {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the slow call never reached ripwire"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    broker.send(json!({
+        "jsonrpc": "2.0", "method": "notifications/cancelled",
+        "params": {"requestId": 7, "reason": "user pressed escape"},
+    }));
+    let answer = broker
+        .response(7, std::time::Duration::from_secs(5))
+        .expect("the cancelled call returns at once, not after the 30 s upstream call");
+    assert_eq!(
+        answer["result"]["structuredContent"]["error"], "cancelled",
+        "{answer}"
+    );
+}
+
 #[test]
 fn a_client_cancellation_stops_the_tool_call() {
     let ws = tempfile::tempdir().unwrap();

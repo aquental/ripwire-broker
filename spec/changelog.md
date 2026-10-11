@@ -119,6 +119,7 @@
 | 2026-10-10 22:30 | O hook não força mais o disco: o spool da memória, o estado da sessão e a status line são gravados por temporário e rename, sem `sync_all`. O acréscimo do `--memory` cai de p95 9,4–9,9 ms para 1,9–2,0 ms, e todo hook fica cerca de 7 ms mais curto. Medido o hook inteiro em três repositórios: o custo que sobra é a consulta ao Ripwire, que cresce com o repositório | [D-174](#d-174--o-hook-não-força-o-disco) |
 | 2026-10-10 23:40 | A janela que segura uma rajada de edições passa a contar do fim da resposta, como os documentos já diziam; contada do início, uma análise mais longa que a janela não segurava nada. Numa rajada de 12 edições num repositório de 11 mil arquivos, as análises caem de 12 para 3 ou 4 e a espera nos hooks de 12 s para 3 a 4 s. No binário e no mod do Claude Code | [D-175](#d-175--a-janela-das-edições-conta-do-fim-da-resposta) |
 | 2026-10-11 00:30 | Bloco C do roteiro rodado. O Claude Code 2.1.296 não escrevia a nota: a descrição do campo começava por "With --memory only", e o agente não sabe se o servidor guarda memória. A descrição da tool passa a pedir a nota, e o agente a escreveu em 2 de 2 sessões; a nota voltou na sessão seguinte (0,67). O uso da memória não ficou demonstrado. O Codex 0.161.0 não alcança as tools do servidor: ele recusa `initialize` | [D-176](#d-176--bloco-c-o-claude-code-escreve-a-nota-quando-a-tool-pede-o-codex-não-fala-com-o-servidor) |
+| 2026-10-11 02:10 | O servidor passa a atender clientes de um MCP anterior ao `2026-07-28`: `initialize`, `ping`, `tools/list`, `tools/call`, `resources/list` e `resources/read` sem o `_meta` por pedido, pelos mesmos tratadores, com o mesmo cancelamento. Com isso o Codex 0.161.0 chama as três tools e escreve a nota; a nota dele não foi entregue na sessão seguinte (0,33) | [D-177](#d-177--o-servidor-atende-clientes-de-um-mcp-anterior) |
 | 2026-10-06 15:52 | A barra mostra o servidor vivo do workspace: `[jev:N]` (requisições ao Jev), com `--memory` `[mem: retr N, stor M]` (leituras e gravações da memória), nos últimos 5 s, e `(online)` no fim; um arquivo por processo `serve`, renovado a cada 10 s e ignorado depois de 30 s | [D-154](#d-154--o-servidor-na-barra-jev-memória-e-online) |
 | 2026-10-06 15:15 | Repositório migrado da organização `CeciApp` para a conta `aquental`: remoto `origin` atualizado, URLs do diagrama de arquitetura trocadas, histórico (D-054, D-055) mantido | [D-153](#d-153--migração-do-repositório-para-aquental) |
 | 2026-10-05 00:30 | Achados baixos da memória, segunda parte, e do eval, em TDD: lease só sai livre e `finish` velho não assenta nada, somas da quota saturam, `memory retry` alcança jobs adiados, ingest perto do teto toma o que cabe, pânico do worker dito (grupo 3); guarda de shell que vê opções, palavras-chave, `-lc`, `xargs` e `find -exec`, `{repo}`/`{fix}` como uma palavra, `spent` só em braço com memória, ids de tarefa recusados, CLI do `ripwire-eval`, `history_incomplete` fora das médias, sessão cortada pela API inválida e prompt longo que segurava o timeout (grupo 3) | [D-151](#d-151--achados-baixos-da-memória-segunda-parte-e-do-eval) |
@@ -8239,3 +8240,65 @@ gravadas em `tests/memory_hosts.rs`. O `--memory` continua experimental.
 **Verificação.** Vermelho: `tests/mcp_surface.rs::publishes_three_read_only_tools_and_a_status_resource`,
 `With --memory only: one or two sentences…` (a descrição não começava pelo que escrever).
 Portões: 849 (5 ignorados) e 887 (8 ignorados), fmt e os dois clippy limpos.
+
+## D-177 — O servidor atende clientes de um MCP anterior
+
+**O defeito** (achado no D-176). O `rust-mcp-sdk` 2.0.0 implementa só o MCP `2026-07-28`, sem
+estado: não há `initialize`, e cada pedido declara o cliente em `_meta`. O Claude Code 2.1.296
+fala esse protocolo. Um cliente de um MCP anterior abre com `initialize` e não manda esse `_meta`;
+o servidor respondia `-32601 No handler is implemented for custom requests` a tudo, e o Codex
+0.161.0 listava o servidor sem conseguir usar nenhuma das três tools.
+
+**O conserto.** O SDK entrega ao `handle_custom_request` todo pedido que não reconhece, e os de um
+cliente anterior caem ali. O broker responde nesse gancho:
+
+| Método | Resposta |
+|---|---|
+| `initialize` | a versão pedida, se for `2025-11-25`, `2025-06-18`, `2025-03-26` ou `2024-11-05`; senão a mais nova delas. Capacidades, `serverInfo` e instruções são os mesmos do `server/discover` |
+| `ping` | vazio |
+| `tools/list`, `resources/list` | os mesmos tratadores |
+| `tools/call`, `resources/read` | os mesmos tratadores, depois de completar o `_meta` com o que o `2026-07-28` exige; o que o cliente pôs lá fica |
+| qualquer outro | `-32601`, com o nome do método |
+
+O `tools/call` passa pelo mesmo `handle_call_tool_request`, então o registro de chamadas em voo e
+o `notifications/cancelled` valem igual, e nenhuma chave com texto da tarefa fica para trás
+(D-052, D-092). Nada muda para um cliente do `2026-07-28`. Não se troca de SDK nem se mantêm dois
+servidores.
+
+**Medido no Codex 0.161.0** (`codex exec --json`, servidor passado por `-c`, sem tocar no
+`~/.codex/config.toml`), no repositório de exemplo, duas sessões:
+
+| Passo | Antes | Depois |
+|---|---|---|
+| As três tools | "aren't available in this session" | chamadas nas duas sessões |
+| A nota em `context_before_finish` | — | escrita nas duas sessões |
+| A nota volta na sessão seguinte | — | não: `kept=0` |
+
+A nota do Codex: "Changed TOKEN_TTL_SECONDS from 3600 to 900 as requested, shortening token
+validity to 15 minutes.". Relevância 0,33; as duas observações automáticas do mesmo store, 0,23 e
+0,19. A do Claude Code no D-176 ("…so validate_token now accepts tokens for 15 minutes instead of
+60") teve 0,67. Uma rodada de cada. A entrega depende de como o agente redige a nota: as que
+passaram nomeiam o símbolo cujo comportamento mudou.
+
+**O que fica de fora.**
+
+- O `install codex --write` continua só imprimindo o bloco `[mcp_servers.ripwire-broker]`.
+- Só o transporte `stdio` foi exercitado; o broker não tem outro.
+- As quatro versões anteriores recebem as mesmas respostas, no formato do `2026-07-28` (com
+  `resultType` e os campos de cache a mais). O Codex as aceitou; outro cliente mais estrito pode
+  não aceitar.
+
+**Risco assumido.** Dois dialetos num servidor: uma tool ou um resource novo tem de ser alcançado
+pelos dois. O teste de ponta a ponta abaixo é o que segura isso.
+
+**Verificação.** Vermelho, antes do código: `tests/mcp_surface.rs`,
+`a_client_of_an_older_mcp_initializes_lists_and_calls` (`initialize is answered`: não era) e
+`an_older_client_can_cancel_its_call` (`the slow call never reached ripwire`). Os dois falam JSON
+cru com o binário. Mutação: 11 de 11 mortas (sem `initialize`; sempre a versão mais nova; versão
+desconhecida recebendo a mais velha; sem instruções; `_meta` sem completar; `_meta` parcial não
+completado; a chamada fora do tratador cancelável; sem `resources/read`; sem `resources/list`; sem
+`ping`; método desconhecido sem nome). Portões: 851 (5 ignorados) e 889 (8
+ignorados), fmt e os dois clippy limpos. Numa das rodadas com a feature `online`,
+`tests/upstream_ripwire.rs::a_hung_upstream_times_out_and_is_restarted` falhou uma vez e passou
+nas seis repetições seguintes: é um teste de tempo (500 ms para o Ripwire reiniciado responder)
+que não toca no código desta mudança.

@@ -195,10 +195,16 @@ Os instrumentos estão prontos; as medições, não.
   tool** pede; com a condição "With --memory only" na frente ele não escrevia, porque não sabe
   se o servidor guarda memória. Corrigido: 2 de 2 sessões escreveram, e a nota voltou na sessão
   seguinte (0,67, perto da barra de 0,60). Não ficou demonstrado que o agente **usa** a memória:
-  falta uma sessão de controle sem ela. **O Codex 0.161.0 não alcança as tools do servidor**, com
-  ou sem memória: o servidor só fala o MCP stateless de `2026-07-28` e responde `-32601` ao
-  `initialize`. Isso é anterior à memória e vale para as três tools; os hooks do Codex são
-  comandos à parte e não dependem disso. É o próximo item a decidir para o Codex.
+  falta uma sessão de controle sem ela. O Codex 0.161.0 não alcançava as tools
+  do servidor, porque ele só falava o MCP stateless de `2026-07-28`.
+- **O servidor atende clientes de um MCP anterior (D-177):** `initialize`, `ping`, `tools/*` e
+  `resources/*` sem o `_meta` por pedido, pelo gancho de pedidos fora do protocolo do SDK e pelos
+  mesmos tratadores. Com isso o Codex chama as três tools e escreve a nota (2 de 2 sessões).
+  **A nota do Codex não foi entregue** (0,33 contra 0,60; a do Claude Code teve 0,67): a entrega
+  depende de como o agente redige a nota, e as que passaram dizem qual símbolo passou a se
+  comportar como. É o ponto fraco conhecido da memória hoje. Uma tool nova tem de ser alcançada
+  pelos dois dialetos: `tests/mcp_surface.rs::a_client_of_an_older_mcp_initializes_lists_and_calls`
+  é o teste que segura isso.
 - **SLO do `hook --memory` (D-170):** medido pelo cronômetro do próprio hook, p95 de 9,5 a 9,9 ms
   contra 10. A folga é de meio milissegundo, e quase todo o custo é a observação (admissão e
   gravação durável). Medido de novo com a T3.12: p95 de 9,6 a 9,8 ms e p99 de 10,0 ms em 5 rodadas.
