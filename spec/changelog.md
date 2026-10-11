@@ -120,6 +120,7 @@
 | 2026-10-10 23:40 | A janela que segura uma rajada de edições passa a contar do fim da resposta, como os documentos já diziam; contada do início, uma análise mais longa que a janela não segurava nada. Numa rajada de 12 edições num repositório de 11 mil arquivos, as análises caem de 12 para 3 ou 4 e a espera nos hooks de 12 s para 3 a 4 s. No binário e no mod do Claude Code | [D-175](#d-175--a-janela-das-edições-conta-do-fim-da-resposta) |
 | 2026-10-11 00:30 | Bloco C do roteiro rodado. O Claude Code 2.1.296 não escrevia a nota: a descrição do campo começava por "With --memory only", e o agente não sabe se o servidor guarda memória. A descrição da tool passa a pedir a nota, e o agente a escreveu em 2 de 2 sessões; a nota voltou na sessão seguinte (0,67). O uso da memória não ficou demonstrado. O Codex 0.161.0 não alcança as tools do servidor: ele recusa `initialize` | [D-176](#d-176--bloco-c-o-claude-code-escreve-a-nota-quando-a-tool-pede-o-codex-não-fala-com-o-servidor) |
 | 2026-10-11 02:10 | O servidor passa a atender clientes de um MCP anterior ao `2026-07-28`: `initialize`, `ping`, `tools/list`, `tools/call`, `resources/list` e `resources/read` sem o `_meta` por pedido, pelos mesmos tratadores, com o mesmo cancelamento. Com isso o Codex 0.161.0 chama as três tools e escreve a nota; a nota dele não foi entregue na sessão seguinte (0,33) | [D-177](#d-177--o-servidor-atende-clientes-de-um-mcp-anterior) |
+| 2026-10-11 03:00 | A descrição do campo `note` passa a dizer o que escrever (o arquivo, o símbolo e o que ele passou a fazer) e traz um exemplo. Com isso as notas escritas pelo Claude Code e pelo Codex foram entregues na sessão seguinte em 4 de 4 rodadas (0,65 a 0,81); antes, a do Codex tinha tido 0,33 | [D-178](#d-178--a-descrição-da-nota-diz-o-que-escrever) |
 | 2026-10-06 15:52 | A barra mostra o servidor vivo do workspace: `[jev:N]` (requisições ao Jev), com `--memory` `[mem: retr N, stor M]` (leituras e gravações da memória), nos últimos 5 s, e `(online)` no fim; um arquivo por processo `serve`, renovado a cada 10 s e ignorado depois de 30 s | [D-154](#d-154--o-servidor-na-barra-jev-memória-e-online) |
 | 2026-10-06 15:15 | Repositório migrado da organização `CeciApp` para a conta `aquental`: remoto `origin` atualizado, URLs do diagrama de arquitetura trocadas, histórico (D-054, D-055) mantido | [D-153](#d-153--migração-do-repositório-para-aquental) |
 | 2026-10-05 00:30 | Achados baixos da memória, segunda parte, e do eval, em TDD: lease só sai livre e `finish` velho não assenta nada, somas da quota saturam, `memory retry` alcança jobs adiados, ingest perto do teto toma o que cabe, pânico do worker dito (grupo 3); guarda de shell que vê opções, palavras-chave, `-lc`, `xargs` e `find -exec`, `{repo}`/`{fix}` como uma palavra, `spent` só em braço com memória, ids de tarefa recusados, CLI do `ripwire-eval`, `history_incomplete` fora das médias, sessão cortada pela API inválida e prompt longo que segurava o timeout (grupo 3) | [D-151](#d-151--achados-baixos-da-memória-segunda-parte-e-do-eval) |
@@ -8302,3 +8303,49 @@ ignorados), fmt e os dois clippy limpos. Numa das rodadas com a feature `online`
 `tests/upstream_ripwire.rs::a_hung_upstream_times_out_and_is_restarted` falhou uma vez e passou
 nas seis repetições seguintes: é um teste de tempo (500 ms para o Ripwire reiniciado responder)
 que não toca no código desta mudança.
+
+## D-178 — A descrição da nota diz o que escrever
+
+**O problema** (D-177). A entrega da nota dependia de como o agente a redigia. A do Codex repetia
+o pedido ("Changed TOKEN_TTL_SECONDS from 3600 to 900 as requested, shortening token validity to
+15 minutes.") e teve 0,33 de relevância; a do Claude Code nomeava a função cujo comportamento
+mudou e teve 0,67. A barra é 0,60.
+
+**O que mudou.** Só texto, em `src/mcp.rs`:
+
+- descrição de `context_before_finish`: "If you changed code, pass `note`: which symbol changed
+  and what it now does differently.";
+- descrição do campo: "One or two sentences on what you changed: name the file and the symbol,
+  and say what it now does differently, not only what was asked. For example: "In src/cache.rs,
+  get() now returns None for an entry older than MAX_AGE_SECONDS, which was lowered from 60 to
+  30."", seguida do que já dizia sobre `--memory` e segredos.
+
+O exemplo é de outro arquivo e de outro símbolo que os do repositório de teste, para a medição
+não ser uma cópia dele.
+
+**Medido** no repositório de exemplo, duas sessões por rodada (a que edita e conclui, a que lê),
+duas rodadas por host, cada uma em workspace e store novos:
+
+| Host | Nota escrita pelo agente | Relevância | Entregue |
+|---|---|---|---|
+| Claude Code 2.1.296 | "In src/auth.py, TOKEN_TTL_SECONDS was lowered from 3600 to 900, so validate_token() now rejects tokens issued 900 or more seconds ago instead of 3600." | 0,71 | sim |
+| Claude Code 2.1.296 | "In src/auth.py, TOKEN_TTL_SECONDS was lowered from 3600 to 900, so validate_token() now rejects tokens older than 15 minutes instead of 1 hour." | 0,81 | sim |
+| Codex 0.161.0 | "In src/auth.py, TOKEN_TTL_SECONDS changed from 3600 to 900, so validate_token expires tokens after 15 minutes." | 0,79 | sim |
+| Codex 0.161.0 | "In src/auth.py, TOKEN_TTL_SECONDS changed from 3600 to 900, so tokens expire after 15 minutes." | 0,65 | sim |
+
+Antes: Claude Code 0,67 (uma rodada, D-176) e Codex 0,33 (uma rodada, D-177). As observações
+automáticas dos mesmos stores ficaram entre 0,20 e 0,36, todas recusadas.
+
+**O que isso mostra e o que não mostra.**
+
+- O exemplo molda a nota: as quatro começam por "In src/auth.py," e seguem a forma dele. A menor
+  nota (a que não nomeia `validate_token`) foi a que ficou mais perto da barra, 0,65.
+- É uma tarefa, num repositório de dois arquivos, com a mesma pergunta na sessão que lê. Se vale
+  para tarefas em que a segunda sessão pergunta outra coisa, só a T5.3 diz.
+- Nenhuma das sessões que receberam a memória a citou. O uso continua sem demonstração.
+
+**Custo.** Quatro sessões do Claude Code, US$ 1,29, e quatro do Codex na conta do mantenedor.
+
+**Verificação.** Vermelho: `tests/mcp_surface.rs::publishes_three_read_only_tools_and_a_status_resource`
+exige as três partes na descrição do campo e a frase na da tool. Portões: 851
+(5 ignorados) e 889 (8 ignorados), fmt e os dois clippy limpos.

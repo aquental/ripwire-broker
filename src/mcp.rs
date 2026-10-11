@@ -330,12 +330,12 @@ pub fn tools(online: bool) -> Vec<Tool> {
             "Gate before finishing",
             "Call before declaring the task done: quality regressions, tests to run and open obligations. \
              status is ready | attention_required | unknown; ready means no open obligation was detected, not that the code is correct. \
-             If you changed code, pass `note`: one or two sentences on what changed and why.",
+             If you changed code, pass `note`: which symbol changed and what it now does differently.",
             json!({
                 "budget_tokens": budget_schema(1800),
                 "include_test_commands": {"type": "boolean", "default": true, "description": "Include run commands when known."},
                 "strict": {"type": "boolean", "default": false, "description": "Also treat minor findings as blocking."},
-                "note": {"type": "string", "maxLength": 500, "description": "One or two sentences on what you changed and why, in plain words (which symbol, which behavior). When the server runs with --memory it is kept for later sessions of this workspace and sent to the memory provider; otherwise it is ignored. No secrets, keys or personal data."},
+                "note": {"type": "string", "maxLength": 500, "description": "One or two sentences on what you changed: name the file and the symbol, and say what it now does differently, not only what was asked. For example: \"In src/cache.rs, get() now returns None for an entry older than MAX_AGE_SECONDS, which was lowered from 60 to 30.\" When the server runs with --memory it is kept for later sessions of this workspace and sent to the memory provider; otherwise it is ignored. No secrets, keys or personal data."},
             }),
             &[],
         ),

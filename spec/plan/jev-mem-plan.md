@@ -488,8 +488,9 @@ atualizado (archify fora desta sessão).
   **Rodada de 2026-10-10 ([D-176](../changelog.md#d-176--bloco-c-o-claude-code-escreve-a-nota-quando-a-tool-pede-o-codex-não-fala-com-o-servidor)):** Claude Code 2.1.296 escreve a nota (2 de 2, depois
   de a descrição da tool pedi-la) e a recebe de volta; se a **usa**, não ficou demonstrado. Codex
   0.161.0 não alcançava as tools do servidor; com o [D-177](../changelog.md#d-177--o-servidor-atende-clientes-de-um-mcp-anterior) alcança e escreve a nota (2 de 2),
-  mas a nota dele não foi entregue na sessão seguinte (0,33). Sem fixture gravada ainda. A tarefa
-  continua aberta.
+  mas a nota dele não foi entregue na sessão seguinte (0,33). Com a redação do [D-178](../changelog.md#d-178--a-descrição-da-nota-diz-o-que-escrever), a nota
+  dos dois hosts é entregue (4 de 4 rodadas). Falta mostrar que o agente a **usa**, com uma sessão
+  de controle, e gravar as fixtures. A tarefa continua aberta.
   **Docs:** `integrations/`, skill, README.
 - [x] **T3.12 · Renderizador `memory-observation/v2`** (PRD v0.4 §5.2,
   [D-171](../changelog.md#d-171--a-leitura-recusa-as-observações-automáticas-prd-v04)). CA-3, CA-12.

@@ -416,7 +416,9 @@ like any other memory; without `--memory` it is ignored. At most 500 bytes: a lo
 refused whole, as is one that looks like a secret or personal data. It never changes the answer,
 and it reaches a later session as untrusted data, never as an instruction. The hooks have no
 note. The tool's description asks the agent for it ("If you changed code, pass `note`"): that is
-the one text every host shows its agent, where the skill reaches only the plugin's users. This is the only text of the host that `--memory` keeps without a command of yours, and
+the one text every host shows its agent, where the skill reaches only the plugin's users. The
+field's description says what to write, the file, the symbol and what it now does differently,
+with an example, because a note that only restates the request is not delivered. This is the only text of the host that `--memory` keeps without a command of yours, and
 `install` says so before writing anything.
 
 **Why the note exists: an automatic observation alone does not reach an answer.** Jev asks
@@ -547,9 +549,13 @@ stay in the JSON either way). `#ripwire-off` stops injection for that session on
   cite it, and nothing in what it did can be told apart from a session without memory.
 - **Codex 0.161.0** calls the three tools and writes the note, in 2 of 2 sessions, since the
   server answers the `initialize` handshake of an older MCP ([D-177](spec/changelog.md#d-177--o-servidor-atende-clientes-de-um-mcp-anterior)).
-  Before that it could not reach the tools at all. The note it wrote was not delivered to the
-  next session: "Changed TOKEN_TTL_SECONDS from 3600 to 900 as requested, shortening token
-  validity to 15 minutes." scored 0.33 against the bar of 0.60. One run.
+  Before that it could not reach the tools at all.
+- **What gets a note delivered is how it is worded.** A note that restated the request ("Changed
+  TOKEN_TTL_SECONDS from 3600 to 900 as requested…") scored 0.33 against the bar of 0.60. Since the
+  field's description asks for the file, the symbol and what it now does differently, with an
+  example ([D-178](spec/changelog.md#d-178--a-descrição-da-nota-diz-o-que-escrever)), the notes of both hosts were
+  delivered in 4 of 4 runs: 0.71 and 0.81 on Claude Code, 0.79 and 0.65 on Codex. One task, one
+  small repository.
 
 Neither host counts as consuming memory yet ([plan](spec/plan/jev-mem-plan.md), T3.11).
 
