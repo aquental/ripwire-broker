@@ -502,7 +502,8 @@ foi injetado.
   ([D-125](changelog.md#d-125--o-marcador-de-opt-out-só-vale-na-borda-do-prompt)).
 - Uma rajada de edições é uma pergunta só
   ([D-106](changelog.md#d-106--uma-rajada-de-edições-é-uma-pergunta-não-uma-por-edição)): uma
-  edição a menos de `--edit-interval-ms` (padrão 1000) da resposta anterior não pergunta nada; os
+  edição a menos de `--edit-interval-ms` (padrão 1000) do fim da resposta anterior (e não de quando
+  ela foi pedida, [D-175](changelog.md#d-175--a-janela-das-edições-conta-do-fim-da-resposta)) não pergunta nada; os
   arquivos ficam guardados e vão junto com a próxima edição depois da janela. Só os 32 primeiros
   arquivos distintos de uma rajada são guardados; os demais não seguem, e o gate do `Stop` os cobre.
   `0` responde a cada edição. Os hooks pedem 1500 tokens no prompt e 800 depois de uma edição.

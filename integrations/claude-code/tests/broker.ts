@@ -37,13 +37,19 @@ export type Call = { server: string; tool: string; args: Record<string, unknown>
 /**
  * Registers the broker's stubs: `mcp.connect` answers the plugin's server, and `mcp.call` answers
  * each call with the next of `answers` (an envelope, or `{ deny }` for a call that fails), as the
- * broker's text block carries it: the JSON on one line (`mcp::text_of`). Returns the calls made.
+ * broker's text block carries it: the JSON on one line (`mcp::text_of`). `onCall` runs inside each
+ * call (to spend clock time). Returns the calls made.
  */
-export function broker(on: On, answers: Array<Envelope | { deny: string }>): Call[] {
+export function broker(
+  on: On,
+  answers: Array<Envelope | { deny: string }>,
+  onCall?: () => Promise<unknown>,
+): Call[] {
   const calls: Call[] = []
   on('mcp.connect', () => ({ value: { isConnected: true, server: SERVER } }))
-  on('mcp.call', ($, e) => {
+  on('mcp.call', async ($, e) => {
     calls.push({ server: e.server, tool: e.tool, args: e.args })
+    await onCall?.()
     const next = answers.shift()
     if (next === undefined) return { deny: 'no answer left in the test' }
     if ('deny' in next) return { deny: String(next.deny) }

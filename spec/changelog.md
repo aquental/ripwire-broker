@@ -117,6 +117,7 @@
 | 2026-10-10 17:50 | T3.12: as observações automáticas passam a dizer, só por nome, o que a análise achou (`memory-observation/v2`, `memory-policy/v2`): símbolos que o Ripwire resolveu, dependentes, testes ligados e o `kind` dos achados. O aceite manual não passou: a relevância da observação de edição foi de 0,20 para 0,48, contra a barra de 0,60 (`kept=0`). A tarefa fica aberta | [D-172](#d-172--t312-o-texto-enriquecido-das-observações-e-o-aceite-que-não-passou) |
 | 2026-10-10 20:40 | A entrega de memória destrava pela nota do agente: `context_before_finish` aceita `note` (até 500 bytes), guardada como nota `host_supplied` com `--memory`; no cenário do roteiro ela teve 0,77 e foi entregue. Cinco acréscimos estruturados ao texto das observações foram medidos e nenhum cruzou a barra. O molde da v2 fica enxuto (sem lista vazia, hash nem limitações). PRD jev-mem v0.5: §5.2 e consentimento | [D-173](#d-173--a-nota-do-agente-na-conclusão-e-o-molde-enxuto-prd-v05) |
 | 2026-10-10 22:30 | O hook não força mais o disco: o spool da memória, o estado da sessão e a status line são gravados por temporário e rename, sem `sync_all`. O acréscimo do `--memory` cai de p95 9,4–9,9 ms para 1,9–2,0 ms, e todo hook fica cerca de 7 ms mais curto. Medido o hook inteiro em três repositórios: o custo que sobra é a consulta ao Ripwire, que cresce com o repositório | [D-174](#d-174--o-hook-não-força-o-disco) |
+| 2026-10-10 23:40 | A janela que segura uma rajada de edições passa a contar do fim da resposta, como os documentos já diziam; contada do início, uma análise mais longa que a janela não segurava nada. Numa rajada de 12 edições num repositório de 11 mil arquivos, as análises caem de 12 para 3 ou 4 e a espera nos hooks de 12 s para 3 a 4 s. No binário e no mod do Claude Code | [D-175](#d-175--a-janela-das-edições-conta-do-fim-da-resposta) |
 | 2026-10-06 15:52 | A barra mostra o servidor vivo do workspace: `[jev:N]` (requisições ao Jev), com `--memory` `[mem: retr N, stor M]` (leituras e gravações da memória), nos últimos 5 s, e `(online)` no fim; um arquivo por processo `serve`, renovado a cada 10 s e ignorado depois de 30 s | [D-154](#d-154--o-servidor-na-barra-jev-memória-e-online) |
 | 2026-10-06 15:15 | Repositório migrado da organização `CeciApp` para a conta `aquental`: remoto `origin` atualizado, URLs do diagrama de arquitetura trocadas, histórico (D-054, D-055) mantido | [D-153](#d-153--migração-do-repositório-para-aquental) |
 | 2026-10-05 00:30 | Achados baixos da memória, segunda parte, e do eval, em TDD: lease só sai livre e `finish` velho não assenta nada, somas da quota saturam, `memory retry` alcança jobs adiados, ingest perto do teto toma o que cabe, pânico do worker dito (grupo 3); guarda de shell que vê opções, palavras-chave, `-lc`, `xargs` e `find -exec`, `{repo}`/`{fix}` como uma palavra, `spent` só em braço com memória, ids de tarefa recusados, CLI do `ripwire-eval`, `history_incomplete` fora das médias, sessão cortada pela API inválida e prompt longo que segurava o timeout (grupo 3) | [D-151](#d-151--achados-baixos-da-memória-segunda-parte-e-do-eval) |
@@ -8136,3 +8137,42 @@ e confere que a ingestão rejeita e limpa e que a sessão recomeça. É um teste
 o contador é do processo. Mutação: 6 de 6 mortas (spool do hook forçado, estado forçado, status
 line forçada, store que nunca força, diretório do spool sem forçar, a variante sem forçar
 forçando). Portões: 848 (5 ignorados) e 886 (8 ignorados), fmt e os dois clippy limpos.
+
+## D-175 — A janela das edições conta do fim da resposta
+
+**O defeito.** Uma rajada de edições é uma pergunta só (D-106): depois de uma edição analisada, as
+que chegam dentro de `--edit-interval-ms` (1.000 ms) são seguradas e seguem com a próxima. O
+README e a spec dizem "da resposta anterior", mas o carimbo (`last_edit_ms`) era posto quando o
+hook planejava a pergunta, antes de fazê-la. Num repositório pequeno a análise leva 0,1 s e a
+diferença não aparece. No `astral-sh/ruff` (11.238 arquivos) ela leva cerca de 1 s (D-174): quando
+terminava, a janela já tinha fechado, e toda edição de uma rajada era analisada, um segundo cada.
+
+**O conserto.** O carimbo vai para o fim da resposta.
+
+- Binário: `hook::run`, depois da análise de uma edição, lê o relógio e grava `last_edit_ms`. O
+  relógio é lido ali, na fronteira do processo, como o da política (D-102); `plan` e `handle`
+  continuam sem tempo real. Um relógio atrasado nunca recua o carimbo.
+- Mod do Claude Code (`hooks/register.ts`): o mesmo, num `finally` depois da pergunta.
+- Vale também quando a análise falha: ela custou o tempo do mesmo jeito.
+
+**Medido** no `ruff`, 12 edições seguidas do mesmo arquivo, cada uma disparada um intervalo depois
+de o hook anterior voltar (o host espera o hook), 3 rodadas, binário do `master` contra o deste
+branch:
+
+| Intervalo entre edições | | Analisadas | Seguradas | Espera total nos hooks |
+|---|---|---|---|---|
+| 0,3 s | antes | 12 | 0 | 12,1 a 18,0 s |
+| 0,3 s | depois | 3 a 4 | 8 a 9 | 3,2 a 4,3 s |
+| 1,5 s | antes | 12 | 0 | 12,0 a 12,3 s |
+| 1,5 s | depois | 12 | 0 | 12,2 a 12,3 s |
+
+Edições espaçadas por mais que a janela continuam todas analisadas, como antes e como o D-106
+quer. Nenhuma edição se perde: as seguradas seguem com a próxima análise, e o `Stop` cobre o fim
+do turno.
+
+**Verificação.** Vermelho, antes do código: `tests/cli.rs::an_edit_right_after_a_slow_analysis_is_held`
+(um Ripwire de mentira que leva 1,3 s por chamada; a segunda edição lançava de novo: `left: 2,
+right: 1`) e, no mod, `the second counts from the end of the answer, however long it took`
+(`Expected: undefined`). Tirar o carimbo, ou trocá-lo pelo menor dos dois, devolve exatamente
+essas falhas. O teste do binário usa tempo real, cerca de 4,7 s, porque a costura é o processo.
+Portões: 849 (5 ignorados) e 887 (8 ignorados), fmt e os dois clippy limpos; mod: 47 testes.

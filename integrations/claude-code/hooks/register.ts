@@ -393,6 +393,11 @@ export const register: Register = (on, options) => {
         await analysed($, 'error', false)
         $.ui.log(`no context (${reason(error)}); continuing without it`)
         return result
+      } finally {
+        // The window opens when the answer ends, not when it was asked (D-175): an analysis
+        // longer than the window would otherwise leave none. A clock set back never moves it back.
+        const ended = await $.clock.now()
+        await update($, lastEditMs, (last) => Math.max(last, ended))
       }
     },
   )
