@@ -190,8 +190,15 @@ Os instrumentos estão prontos; as medições, não.
   valor antigo e o novo: 0,56), e o molde enxuto não subiu a nota (0,32 contra 0,34). O que a
   leitura aceita é texto que explica o comportamento. Por isso `context_before_finish` ganhou
   `note` (até 500 bytes, varredura de segredo e PII, nunca muda a resposta, ignorada sem
-  `--memory`). **Falta ver um agente real escrevê-la**: a skill e o `AGENTS.md` pedem, mas só o
-  bloco C do roteiro mostra se os hosts obedecem. Os hooks não têm nota.
+  `--memory`). Os hooks não têm nota.
+- **Bloco C rodado (D-176):** o Claude Code 2.1.296 só escreve a nota quando a **descrição da
+  tool** pede; com a condição "With --memory only" na frente ele não escrevia, porque não sabe
+  se o servidor guarda memória. Corrigido: 2 de 2 sessões escreveram, e a nota voltou na sessão
+  seguinte (0,67, perto da barra de 0,60). Não ficou demonstrado que o agente **usa** a memória:
+  falta uma sessão de controle sem ela. **O Codex 0.161.0 não alcança as tools do servidor**, com
+  ou sem memória: o servidor só fala o MCP stateless de `2026-07-28` e responde `-32601` ao
+  `initialize`. Isso é anterior à memória e vale para as três tools; os hooks do Codex são
+  comandos à parte e não dependem disso. É o próximo item a decidir para o Codex.
 - **SLO do `hook --memory` (D-170):** medido pelo cronômetro do próprio hook, p95 de 9,5 a 9,9 ms
   contra 10. A folga é de meio milissegundo, e quase todo o custo é a observação (admissão e
   gravação durável). Medido de novo com a T3.12: p95 de 9,6 a 9,8 ms e p99 de 10,0 ms em 5 rodadas.

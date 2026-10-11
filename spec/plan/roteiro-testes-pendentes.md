@@ -200,6 +200,20 @@ echo '{"text": "In src/auth.py, TOKEN_TTL_SECONDS was lowered from 3600 to 900 s
 $B memory add --workspace "$W" --file ../note.json
 ```
 
+**Rodado em 2026-10-10 ([D-176](../changelog.md#d-176--bloco-c-o-claude-code-escreve-a-nota-quando-a-tool-pede-o-codex-não-fala-com-o-servidor)).**
+
+| Host | O agente escreve a nota | A nota volta na sessão seguinte | O agente usa a memória |
+|---|---|---|---|
+| Claude Code 2.1.296, descrição antiga | não (1 sessão: `context_before_finish {}`) | — | — |
+| Claude Code 2.1.296, descrição que pede a nota | sim, 2 de 2 | sim (`kept=1`, 0,67) | não demonstrado |
+| Claude Code 2.1.296, nota semeada à mão | — | sim (`kept=1`, 0,80) | não demonstrado |
+| Codex 0.161.0 | as tools do servidor não ficam disponíveis | — | — |
+
+O que falta neste bloco: uma sessão de controle sem memória, para dizer se o comportamento do
+Claude Code muda; o Codex, que depende de o servidor aceitar `initialize`; e as fixtures em
+`tests/memory_hosts.rs`. No Codex, o `install codex --write` só imprime o bloco do
+`~/.codex/config.toml`: é preciso acrescentá-lo à mão.
+
 ### Claude Code
 
 1. Rode as duas sessões do bloco B. Anote `claude --version`.
