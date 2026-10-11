@@ -573,6 +573,12 @@ stay in the JSON either way). `#ripwire-off` stops injection for that session on
   nothing could be seen there. One scenario; the evaluation round (T5.3) is what says how far it
   goes.
 
+- **The reason in the note does not make an agent hesitate before a new request**
+  ([D-181](spec/changelog.md#d-181--a-nota-com-o-porquê-não-faz-o-agente-hesitar-diante-de-um-pedido-novo)). Asked to change the same value again, both hosts did it at once, with the
+  note in front of them as without: 7 of 7 sessions on Claude Code, 2 of 2 on Codex, in the same
+  number of steps. For that request the read itself left the note out in 3 of 4 sessions
+  (relevance 0.45): it is not a fact the task needs.
+
 Claude Code is the one host shown to act on a memory, in one scenario
 ([plan](spec/plan/jev-mem-plan.md), T3.11).
 

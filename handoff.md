@@ -217,7 +217,13 @@ Os instrumentos estão prontos; as medições, não.
   e 3 de 3 com a nota antiga; e fizeram menos passos (mediana 5 contra 11,5). É a primeira
   medição em que a memória muda um resultado. No Codex o cenário não discrimina: ele já mantinha
   a mudança sem memória. **O que segura a promoção agora** é a T5.3 (se isso vale fora de um
-  cenário) e um caso que discrimine no Codex. Uma tool nova tem de ser alcançada
+  cenário) e um caso que discrimine no Codex.
+- **A nota com o porquê não faz o agente hesitar (D-181).** Era o risco do D-180. Pedido novo e
+  legítimo de mudar o mesmo valor: os dois hosts mudaram de imediato, com a nota no envelope ou
+  sem ela, no mesmo número de passos. Para esse pedido a própria leitura deixa a nota de fora
+  (relevância 0,45): a barra de entrada faz o trabalho dela. Quando a leitura estoura o prazo ela
+  entrega as âncoras sem a validação do Jev (`degraded: true`, D-156), e foi assim que a nota
+  chegou numa das sessões; o agente obedeceu do mesmo jeito. Uma tool nova tem de ser alcançada
   pelos dois dialetos: `tests/mcp_surface.rs::a_client_of_an_older_mcp_initializes_lists_and_calls`
   é o teste que segura isso.
 - **SLO do `hook --memory` (D-170):** medido pelo cronômetro do próprio hook, p95 de 9,5 a 9,9 ms

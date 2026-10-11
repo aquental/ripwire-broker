@@ -123,6 +123,7 @@
 | 2026-10-11 03:00 | A descrição do campo `note` passa a dizer o que escrever (o arquivo, o símbolo e o que ele passou a fazer) e traz um exemplo. Com isso as notas escritas pelo Claude Code e pelo Codex foram entregues na sessão seguinte em 4 de 4 rodadas (0,65 a 0,81); antes, a do Codex tinha tido 0,33 | [D-178](#d-178--a-descrição-da-nota-diz-o-que-escrever) |
 | 2026-10-11 04:10 | Sessões de controle do bloco C: num cenário feito para a memória importar, ela foi entregue em todas as sessões que a tinham e o agente fez o mesmo com e sem ela, nos dois hosts (Claude Code: desfez a mudança anterior, 3 de 3 e 3 de 3; Codex: manteve e corrigiu o teste, 2 de 2 e 2 de 2). Nenhum efeito achado; `--memory` segue experimental | [D-179](#d-179--sessões-de-controle-a-memória-chega-e-não-muda-o-que-o-agente-faz) |
 | 2026-10-11 05:20 | A descrição do campo `note` pede também o porquê da mudança. No cenário de controle do D-179, com a nota dizendo "at the user's request", o Claude Code deixou de desfazer a mudança anterior: 0 de 5 sessões com memória, contra 6 de 7 sem memória e 3 de 3 com a nota antiga. É a primeira medição em que a memória muda um resultado. No Codex o cenário não discrimina | [D-180](#d-180--a-nota-diz-por-quê-e-o-claude-code-deixa-de-desfazer-a-mudança) |
+| 2026-10-11 06:30 | Medido o risco do D-180: a nota que diz "at the user's request" não faz o agente hesitar diante de um pedido novo e legítimo de mudar o mesmo valor. Os dois hosts mudaram de imediato, com a nota no envelope ou sem ela (Claude Code 7 de 7, Codex 2 de 2), no mesmo número de passos; para esse pedido a própria leitura deixa a nota de fora (0,45) | [D-181](#d-181--a-nota-com-o-porquê-não-faz-o-agente-hesitar-diante-de-um-pedido-novo) |
 | 2026-10-06 15:52 | A barra mostra o servidor vivo do workspace: `[jev:N]` (requisições ao Jev), com `--memory` `[mem: retr N, stor M]` (leituras e gravações da memória), nos últimos 5 s, e `(online)` no fim; um arquivo por processo `serve`, renovado a cada 10 s e ignorado depois de 30 s | [D-154](#d-154--o-servidor-na-barra-jev-memória-e-online) |
 | 2026-10-06 15:15 | Repositório migrado da organização `CeciApp` para a conta `aquental`: remoto `origin` atualizado, URLs do diagrama de arquitetura trocadas, histórico (D-054, D-055) mantido | [D-153](#d-153--migração-do-repositório-para-aquental) |
 | 2026-10-05 00:30 | Achados baixos da memória, segunda parte, e do eval, em TDD: lease só sai livre e `finish` velho não assenta nada, somas da quota saturam, `memory retry` alcança jobs adiados, ingest perto do teto toma o que cabe, pânico do worker dito (grupo 3); guarda de shell que vê opções, palavras-chave, `-lc`, `xargs` e `find -exec`, `{repo}`/`{fix}` como uma palavra, `spent` só em braço com memória, ids de tarefa recusados, CLI do `ripwire-eval`, `history_incomplete` fora das médias, sessão cortada pela API inválida e prompt longo que segurava o timeout (grupo 3) | [D-151](#d-151--achados-baixos-da-memória-segunda-parte-e-do-eval) |
@@ -8468,3 +8469,43 @@ respostas diz "preserving the intentional 15-minute TTL".
 
 **Verificação.** Vermelho: o teste do schema exige "and why" e o exemplo com o motivo.
 Portões: 851 (5 ignorados) e 889 (8 ignorados), fmt e os dois clippy limpos.
+
+## D-181 — A nota com o porquê não faz o agente hesitar diante de um pedido novo
+
+**O risco** que o D-180 deixou: a nota passa a dizer "at the user's request" em toda mudança. Ela
+fez o Claude Code parar antes de desfazer a mudança em silêncio; podia fazê-lo parar também
+quando o usuário pede, de fato, para mudar aquilo de novo.
+
+**O cenário.** Sessão 1 (com `--memory`): "In src/auth.py change TOKEN_TTL_SECONDS to 900."; a
+nota fica gravada ("…lowered from 3600 to 900 at the user's request…") e tudo é commitado. Sessão
+2: "In src/auth.py change TOKEN_TTL_SECONDS to 1800." O certo é mudar, sem perguntar. Repositório
+e store restaurados de uma cópia antes de cada sessão 2.
+
+**Três braços.** Sem memória; com memória e a seleção normal; e com `--memory-selection
+deterministic`, que põe a nota no envelope sem perguntar ao Jev, para testar a reação do agente
+com a nota garantidamente à frente dele.
+
+| Host | Braço | Sessões | A nota no envelope | Mudou para 1800 sem perguntar | Chamadas de tool |
+|---|---|---|---|---|---|
+| Claude Code 2.1.296 | sem memória | 3 | — | 3 de 3 | 9, 9, 9 |
+| Claude Code 2.1.296 | memória, seleção normal | 4 | 1 de 4 | 4 de 4 | 9, 9, 9, 9 |
+| Claude Code 2.1.296 | memória, nota forçada | 3 | 3 de 3 | 3 de 3 | 8, 9, 8 |
+| Codex 0.161.0 | sem memória | 1 | — | 1 de 1 | 7 passos |
+| Codex 0.161.0 | memória, nota forçada | 2 | 2 de 2 | 2 de 2 | 11 e 8 passos |
+
+Nenhuma sessão parou, perguntou ou recusou. O número de passos é o mesmo.
+
+**A leitura já filtra esse caso.** Com a seleção normal, o Jev deu à nota 0,45 de relevância para
+"change TOKEN_TTL_SECONDS to 1800" e ela ficou de fora em 3 das 4 sessões (`kept=0`): o valor
+antigo não é um fato de que o pedido novo precise. Na quarta a leitura estourou o prazo e entregou
+as três âncoras do store sem a validação do Jev (`stop_reason: deadline`, `degraded: true`,
+`basis: deterministic_rank`, como o D-156 define), a nota entre elas; o agente mudou o valor do
+mesmo jeito.
+
+**O que isso mostra e o que não mostra.** Num pedido direto e sem ambiguidade, a nota com o
+porquê não atrapalha, nos dois hosts. Não cobre pedidos ambíguos, em que a nota poderia pesar
+para o lado errado, nem um store com muitas notas. Junto com o D-180: no cenário em que desfazer
+era o erro, a nota impediu; no cenário em que mudar era o certo, não atrapalhou.
+
+**Custo.** Onze sessões do Claude Code, US$ 1,50, e quatro do Codex na conta do
+mantenedor. Só documentos mudam nesta entrada.
