@@ -2316,6 +2316,62 @@ fn install_refuses_a_workspace_path_that_is_not_utf8() {
 
 // --- D-105: the version is not worth a process per hook event ---
 
+/// D-175: a burst of edits is one ask, and the second of the window counts from the end of the
+/// answer. Counted from its start, an analysis longer than the window would leave no window at
+/// all: on a large repository every edit of a burst was analysed, a second each.
+#[test]
+fn an_edit_right_after_a_slow_analysis_is_held() {
+    let (state, ws, stub_dir) = (
+        tempfile::tempdir().unwrap(),
+        common::sample_repo(),
+        tempfile::tempdir().unwrap(),
+    );
+    let counter = stub_dir.path().join("version-asks");
+    let launches = || {
+        std::fs::read_to_string(stub_dir.path().join("version-asks.launches"))
+            .map(|t| t.lines().count())
+            .unwrap_or(0)
+    };
+    // The stand-in of `common::counting_ripwire`, taking 1.3 s to answer a call.
+    let fast =
+        std::fs::read_to_string(common::counting_ripwire(stub_dir.path(), &counter)).unwrap();
+    let answer = "        result = {\"content\"";
+    assert!(fast.contains(answer), "the stand-in changed: {fast}");
+    let ripwire = stub_dir.path().join("slow-analysis");
+    common::write_executable(
+        &ripwire,
+        fast.replace(
+            answer,
+            &format!("        import time; time.sleep(1.3)\n{answer}"),
+        ),
+    );
+    let args = [
+        "hook",
+        "claude-code",
+        "post-tool-use",
+        "--state-dir",
+        state.path().to_str().unwrap(),
+        "--ripwire",
+        ripwire.to_str().unwrap(),
+    ];
+    let edit = || {
+        let (code, _, err) = run(&args, &edit_event(ws.path(), "burst"));
+        assert_eq!(code, 0, "{err}");
+    };
+
+    edit();
+    assert_eq!(launches(), 1, "the first edit of a burst is analysed");
+    edit();
+    assert_eq!(
+        launches(),
+        1,
+        "the edit that follows at once is held: the window opens when the answer ends"
+    );
+    std::thread::sleep(std::time::Duration::from_millis(1_100));
+    edit();
+    assert_eq!(launches(), 2, "and the window still closes a second later");
+}
+
 #[test]
 fn a_second_hook_event_does_not_ask_ripwire_for_its_version_again() {
     let state = tempfile::tempdir().unwrap();

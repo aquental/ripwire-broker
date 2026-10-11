@@ -618,7 +618,8 @@ hook contract, so the same command serves both:
   detection switches off for the rest of the session (no more `git` calls, and `Bash` edits are left to the
   `Stop` gate); a new session tries again. A change made by another process while the
   command ran is blamed on the command (the fallback only; the host's list is exact). Codex is unchanged.
-- **Bursts of edits:** an edit within `--edit-interval-ms` (default 1000) of the previous answer asks nothing;
+- **Bursts of edits:** an edit within `--edit-interval-ms` (default 1000) of the end of the previous answer
+  (not of when it was asked, [D-175](spec/changelog.md#d-175--a-janela-das-edições-conta-do-fim-da-resposta)) asks nothing;
   its files are held and ride along with the next edit past the window, so news is delayed by one edit at most.
   Only the first 32 distinct files of a burst are held; the rest are not forwarded, and `Stop` covers them and
   the tail of the turn. `--edit-interval-ms 0` answers every edit (D-106).

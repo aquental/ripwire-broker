@@ -73,6 +73,27 @@ test('edits within a second are held and ride with the next', async ($, on) => {
   expect(calls.map((c) => c.args.files)).toEqual([['a.rs'], ['c.rs', 'b.rs']])
 })
 
+test('the second counts from the end of the answer, however long it took', async ($, on) => {
+  const clock = mock.clock(on, { now: 10_000 })
+  cwd(on)
+  logs(on)
+  // The analysis takes a second and a half: longer than the window itself.
+  const calls = broker(
+    on,
+    [envelope('context_after_edit', 9), envelope('context_after_edit', 10)],
+    () => clock.advance(1500),
+  )
+  tools(on)
+  await $.tool.call(edit('/work/a.rs'))
+  await clock.advance(500)
+  const held = await $.tool.call(edit('/work/b.rs'))
+  expect(held.context).toBeUndefined()
+  expect(calls.map((c) => c.args.files)).toEqual([['a.rs']])
+  await clock.advance(600)
+  await $.tool.call(edit('/work/c.rs'))
+  expect(calls.map((c) => c.args.files)).toEqual([['a.rs'], ['c.rs', 'b.rs']])
+})
+
 test('a read-only bash in a dirty tree asks nothing', async ($, on) => {
   mock.clock(on, { now: 10_000 })
   cwd(on)

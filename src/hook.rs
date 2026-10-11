@@ -744,12 +744,17 @@ fn policy_of(args: &HookArgs) -> Policy {
         gate: args.gate,
         log_refs: args.log_refs,
         edit_interval_ms: args.edit_interval_ms.unwrap_or(default.edit_interval_ms),
-        now_ms: std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .ok()
-            .map(|d| d.as_millis() as u64),
+        now_ms: clock_ms(),
         ..default
     }
+}
+
+/// The wall clock in milliseconds; `None` before the epoch.
+fn clock_ms() -> Option<u64> {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .map(|d| d.as_millis() as u64)
 }
 
 /// The version of `binary`, from the session's cache when the binary has not changed (D-105). A
@@ -947,10 +952,18 @@ pub async fn run(args: &HookArgs, stdin: &str) -> Option<Value> {
             return Some(failure(&e));
         }
     };
+    let edit = matches!(planned, Some(Plan::Edit(_)));
     let out = match planned {
         Some(planned) => ask_with(args.event, planned, &broker, &mut state, &policy).await,
         None => handle(args.event, &input, &broker, &mut state, &policy).await,
     };
+    // The window that holds a burst of edits opens when the answer ends, not when it was asked
+    // (D-175): an analysis longer than the window would otherwise leave none, and on a large
+    // repository every edit of a burst was analysed. The clock is read here, at the process
+    // boundary, like the policy's (D-102). A clock set back never moves the stamp back.
+    if let (true, Some(ended)) = (edit, clock_ms()) {
+        state.last_edit_ms = state.last_edit_ms.max(ended);
+    }
     finish(&state);
     out
 }

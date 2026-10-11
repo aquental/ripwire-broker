@@ -204,8 +204,11 @@ Os instrumentos estão prontos; as medições, não.
   análise é a consulta ao Ripwire, que cresce com o repositório: cerca de 160 ms num repositório
   de 2 arquivos, 475 ms num de 2.573 e 1.030 ms num de 11.238. Um servidor vivo atendendo os
   hooks pouparia de 75 a 100 ms por hook em qualquer tamanho (47%, 19% e 10%), não a consulta.
-  Com análises acima de 1 s, a janela de 1 s que segura edições seguidas (`edit_interval_ms`,
-  contada do início do hook) nunca fecha a tempo: num repositório grande toda edição é analisada.
+  A janela de 1 s que segura edições seguidas (`edit_interval_ms`) era contada do início do hook
+  e, com análises acima de 1 s, não segurava nada; desde o D-175 conta do fim da resposta, no
+  binário e no mod. Numa rajada de 12 edições no `ruff`, as análises caíram de 12 para 3 ou 4.
+  Edições espaçadas por mais de 1 s continuam todas analisadas, cerca de 1 s cada: aí o custo é
+  a consulta ao Ripwire, e nada feito até aqui mexe nela.
 - **A chave:** `RIPWIRE_BROKER_JEV_API_KEY` guarda a credencial de um provider por vez: confira
   qual está lá antes de uma chamada real.
 - **Fase 6:** inteira. A política de falhar em CI com `strict=true` (§21.4) depende dela.
