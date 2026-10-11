@@ -122,6 +122,7 @@
 | 2026-10-11 02:10 | O servidor passa a atender clientes de um MCP anterior ao `2026-07-28`: `initialize`, `ping`, `tools/list`, `tools/call`, `resources/list` e `resources/read` sem o `_meta` por pedido, pelos mesmos tratadores, com o mesmo cancelamento. Com isso o Codex 0.161.0 chama as três tools e escreve a nota; a nota dele não foi entregue na sessão seguinte (0,33) | [D-177](#d-177--o-servidor-atende-clientes-de-um-mcp-anterior) |
 | 2026-10-11 03:00 | A descrição do campo `note` passa a dizer o que escrever (o arquivo, o símbolo e o que ele passou a fazer) e traz um exemplo. Com isso as notas escritas pelo Claude Code e pelo Codex foram entregues na sessão seguinte em 4 de 4 rodadas (0,65 a 0,81); antes, a do Codex tinha tido 0,33 | [D-178](#d-178--a-descrição-da-nota-diz-o-que-escrever) |
 | 2026-10-11 04:10 | Sessões de controle do bloco C: num cenário feito para a memória importar, ela foi entregue em todas as sessões que a tinham e o agente fez o mesmo com e sem ela, nos dois hosts (Claude Code: desfez a mudança anterior, 3 de 3 e 3 de 3; Codex: manteve e corrigiu o teste, 2 de 2 e 2 de 2). Nenhum efeito achado; `--memory` segue experimental | [D-179](#d-179--sessões-de-controle-a-memória-chega-e-não-muda-o-que-o-agente-faz) |
+| 2026-10-11 05:20 | A descrição do campo `note` pede também o porquê da mudança. No cenário de controle do D-179, com a nota dizendo "at the user's request", o Claude Code deixou de desfazer a mudança anterior: 0 de 5 sessões com memória, contra 6 de 7 sem memória e 3 de 3 com a nota antiga. É a primeira medição em que a memória muda um resultado. No Codex o cenário não discrimina | [D-180](#d-180--a-nota-diz-por-quê-e-o-claude-code-deixa-de-desfazer-a-mudança) |
 | 2026-10-06 15:52 | A barra mostra o servidor vivo do workspace: `[jev:N]` (requisições ao Jev), com `--memory` `[mem: retr N, stor M]` (leituras e gravações da memória), nos últimos 5 s, e `(online)` no fim; um arquivo por processo `serve`, renovado a cada 10 s e ignorado depois de 30 s | [D-154](#d-154--o-servidor-na-barra-jev-memória-e-online) |
 | 2026-10-06 15:15 | Repositório migrado da organização `CeciApp` para a conta `aquental`: remoto `origin` atualizado, URLs do diagrama de arquitetura trocadas, histórico (D-054, D-055) mantido | [D-153](#d-153--migração-do-repositório-para-aquental) |
 | 2026-10-05 00:30 | Achados baixos da memória, segunda parte, e do eval, em TDD: lease só sai livre e `finish` velho não assenta nada, somas da quota saturam, `memory retry` alcança jobs adiados, ingest perto do teto toma o que cabe, pânico do worker dito (grupo 3); guarda de shell que vê opções, palavras-chave, `-lc`, `xargs` e `find -exec`, `{repo}`/`{fix}` como uma palavra, `spent` só em braço com memória, ids de tarefa recusados, CLI do `ripwire-eval`, `history_incomplete` fora das médias, sessão cortada pela API inválida e prompt longo que segurava o timeout (grupo 3) | [D-151](#d-151--achados-baixos-da-memória-segunda-parte-e-do-eval) |
@@ -8411,3 +8412,59 @@ casos sem histórico no git (decisões que não viram commit) e medir esses.
 
 **Custo.** Sete sessões do Claude Code, US$ 1,53, e cinco do Codex na conta do mantenedor. Só
 documentos mudam nesta entrada.
+
+## D-180 — A nota diz por quê, e o Claude Code deixa de desfazer a mudança
+
+**A hipótese** que o D-179 deixou: o agente lê no git o que mudou; o que só a nota pode dizer é
+que a mudança foi pedida. A nota do D-178 não dizia.
+
+**O que mudou.** Só texto, em `src/mcp.rs`: a descrição do campo `note` passa a pedir "what it
+now does differently, and why (who asked for it, or what it fixes), so a later session does not
+undo it by mistake", e o exemplo termina em "lowered from 60 to 30 at the user's request to cut
+stale reads".
+
+**As notas** que as sessões 1 deixaram, com o mesmo pedido de antes ("In src/auth.py change
+TOKEN_TTL_SECONDS to 900."):
+
+- Claude Code: "In src/auth.py, TOKEN_TTL_SECONDS lowered from 3600 to 900 at the user's request;
+  validate_token() now rejects tokens older than 15 minutes."
+- Codex: "In src/auth.py, TOKEN_TTL_SECONDS changed from 3600 to 900 at the user's request,
+  setting the token lifetime to 15 minutes."
+
+**Medido** no cenário do D-179 (um teste novo contradiz a mudança; "faça a suíte passar"), com o
+repositório e o store restaurados de uma cópia antes de cada sessão.
+
+Claude Code 2.1.296:
+
+| Braço | Sessões | Desfez a mudança (mexeu no TTL) | Manteve |
+|---|---|---|---|
+| com memória, nota com o porquê | 5 | 0 | 5: parou sem editar, citou a nota e perguntou |
+| sem memória, neste repositório | 4 | 3 (3600, 1800, 3600) | 1: parou e perguntou |
+| sem memória, D-179 | 3 | 3 | 0 |
+| com memória, nota sem o porquê, D-179 | 3 | 3 | 0 |
+
+Sem memória, 6 de 7 desfizeram; com a nota que diz o porquê, 0 de 5 (teste exato de Fisher,
+p ≈ 0,008). As respostas com memória dizem de onde vem a decisão: "the ripwire-broker memory holds
+a note saying the TTL was lowered from 3600 to 900 at your request", "one of them undoes a
+decision you made earlier". As sessões com memória também foram mais curtas: 9, 4, 4, 9 e 5
+chamadas de tool (mediana 5), contra 12, 9, 11 e 12 (mediana 11,5), e custaram em média US$ 0,14
+contra US$ 0,18. A memória foi entregue nas 5 (`kept=1`).
+
+Codex 0.161.0: com memória, 2 de 2 mantiveram o TTL e corrigiram o teste, como no D-179 com e sem
+memória. O cenário não discrimina nele: sem memória ele já escolhe a saída certa. Uma das duas
+respostas diz "preserving the intentional 15-minute TTL".
+
+**O que isso mostra e o que não mostra.**
+
+- É a primeira medição em que a memória muda o que um agente faz, e muda para o lado certo: a
+  mudança pedida não é desfeita em silêncio.
+- É um cenário, montado para isso, num repositório de dois arquivos. O efeito depende de a nota
+  dizer o porquê, e o porquê só está na nota quando o agente da sessão 1 o escreve.
+- "At the user's request" é o que o agente escreve quando o pedido não dá motivo. Uma nota assim
+  em toda mudança pode fazer a sessão seguinte hesitar onde não devia; isso não foi medido.
+- No Codex nada foi demonstrado além da entrega.
+
+**Custo.** Dez sessões do Claude Code, US$ 1,54, e três do Codex na conta do mantenedor.
+
+**Verificação.** Vermelho: o teste do schema exige "and why" e o exemplo com o motivo.
+Portões: 851 (5 ignorados) e 889 (8 ignorados), fmt e os dois clippy limpos.

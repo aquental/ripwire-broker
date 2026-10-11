@@ -137,6 +137,13 @@ async fn publishes_three_read_only_tools_and_a_status_resource() {
                     "{says}"
                 );
                 assert!(tool.contains("what it now does differently"), "{tool}");
+                // And why: a later session can read what changed in git, and only the note
+                // can tell it that the change was asked for (D-180).
+                assert!(says.contains("and why"), "{says}");
+                assert!(
+                    says.contains("at the user's request"),
+                    "the example: {says}"
+                );
             }
             _ => assert!(note.is_null(), "{}", t.name),
         }

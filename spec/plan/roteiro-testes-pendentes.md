@@ -213,9 +213,12 @@ $B memory add --workspace "$W" --file ../note.json
 | Codex 0.161.0, com a redação do D-178 | sim, 2 de 2 | sim, 2 de 2 (0,79 e 0,65) | não demonstrado |
 | Claude Code 2.1.296, sessões de controle (D-179) | sim | sim, 3 de 3 | **sem diferença**: reverteu a mudança anterior em 3 de 3 com memória e 3 de 3 sem |
 | Codex 0.161.0, sessões de controle (D-179) | sim | sim, 2 de 2 | **sem diferença**: corrigiu o teste em 2 de 2 com memória e 2 de 2 sem |
+| Claude Code 2.1.296, nota com o porquê (D-180) | sim | sim, 5 de 5 | **sim**: desfez a mudança em 0 de 5 com memória, 6 de 7 sem |
+| Codex 0.161.0, nota com o porquê (D-180) | sim | sim, 2 de 2 | sem diferença visível: já mantinha a mudança sem memória |
 
-As sessões de controle foram rodadas ([D-179](../changelog.md#d-179--sessões-de-controle-a-memória-chega-e-não-muda-o-que-o-agente-faz)) e não acharam diferença. O que falta
-neste bloco: decidir o que fazer com esse resultado antes de gravar as fixtures em
+As sessões de controle não acharam diferença com a nota que só dizia o que mudou (D-179) e
+acharam no Claude Code com a nota que diz por quê ([D-180](../changelog.md#d-180--a-nota-diz-por-quê-e-o-claude-code-deixa-de-desfazer-a-mudança)). O que falta neste bloco: um
+cenário em que o Codex erre sem memória, para haver o que medir nele, e as fixtures em
 `tests/memory_hosts.rs`. No Codex, o `install codex --write` só imprime o bloco do
 `~/.codex/config.toml`: é preciso acrescentá-lo à mão.
 

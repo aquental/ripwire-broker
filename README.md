@@ -417,8 +417,9 @@ refused whole, as is one that looks like a secret or personal data. It never cha
 and it reaches a later session as untrusted data, never as an instruction. The hooks have no
 note. The tool's description asks the agent for it ("If you changed code, pass `note`"): that is
 the one text every host shows its agent, where the skill reaches only the plugin's users. The
-field's description says what to write, the file, the symbol and what it now does differently,
-with an example, because a note that only restates the request is not delivered. This is the only text of the host that `--memory` keeps without a command of yours, and
+field's description says what to write, the file, the symbol, what it now does differently and
+why, with an example: a note that only restates the request is not delivered, and one that does
+not say the change was asked for does not keep a later session from undoing it. This is the only text of the host that `--memory` keeps without a command of yours, and
 `install` says so before writing anything.
 
 **Why the note exists: an automatic observation alone does not reach an answer.** Jev asks
@@ -564,7 +565,16 @@ stay in the JSON either way). `#ripwire-off` stops injection for that session on
   it and fixed the test in 2 of 2 either way. Both read the history from git in both arms. One
   scenario, few runs: it shows no effect here, not that there is none.
 
-Neither host counts as consuming memory ([plan](spec/plan/jev-mem-plan.md), T3.11).
+- **With the reason in the note, Claude Code stops undoing the earlier change**
+  ([D-180](spec/changelog.md#d-180--a-nota-diz-por-quê-e-o-claude-code-deixa-de-desfazer-a-mudança)). The field's description now asks why the change was made, and the note of
+  the first session said "at the user's request". In the same task, 0 of 5 sessions with that
+  memory undid the change (each stopped, cited the note and asked), against 6 of 7 without
+  memory and 3 of 3 with the older note. Codex already kept the change without memory, so
+  nothing could be seen there. One scenario; the evaluation round (T5.3) is what says how far it
+  goes.
+
+Claude Code is the one host shown to act on a memory, in one scenario
+([plan](spec/plan/jev-mem-plan.md), T3.11).
 
 #### Following memory live
 
