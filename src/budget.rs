@@ -77,7 +77,8 @@ pub fn notes_reserve() -> u32 {
 /// Room held back from the entries of a `context_for_task` that reads memory, for what the read
 /// writes after them (D-103's reasoning; PRD jev-mem §8.2): `provenance.memory` and the memory
 /// limitations, in their widest reachable form, and a digit `estimated_tokens` may gain. Memories
-/// themselves only get what is left over: they give way, never an entry.
+/// themselves are not reserved for: one that is kept takes its room from the last items
+/// (`add_memories`), so a read that keeps nothing costs the entries nothing.
 pub fn memory_reserve() -> u32 {
     let limits = crate::memory::store::Limits::default();
     let widest = crate::model::MemoryProvenance {
@@ -220,6 +221,26 @@ fn next_step(env: &Envelope) -> Option<String> {
     })
 }
 
+/// Shrinks the tail of the items until the envelope is inside `limit`: the last item loses its
+/// body, then goes and is counted as omitted. False when there is no item left and it still does
+/// not fit.
+fn make_room(env: &mut Envelope, limit: u32) -> bool {
+    while estimate_tokens(env) > limit {
+        match env.items.last_mut() {
+            Some(last) if last.content.is_some() => last.content = None,
+            Some(_) => {
+                env.items.pop();
+                env.budget.shown -= 1;
+                env.budget.omitted += 1;
+                env.budget.truncated = true;
+                env.budget.next_step = next_step(env);
+            }
+            None => return false,
+        }
+    }
+    true
+}
+
 /// Adds notes after the items (peripheral context, PRD 10.2 #9) and the note limitations.
 /// Over budget, the last notes give way first, then the lowest-ranked items, which are
 /// counted as omitted. `reserve` is room a later step still has to write in, kept free of notes.
@@ -273,10 +294,12 @@ pub struct MemoryFit {
     pub already: usize,
 }
 
-/// Adds `items`, best first, inside memory's share and inside what the envelope has left: memory
-/// is what gives way, never an item, a test or a risk already there. `seen` says which ids this
-/// session already received; they are counted in `already_delivered` before anything is fitted,
-/// so the count is room taken like the rest.
+/// Adds `items`, best first, inside memory's share of the budget (PRD jev-mem §10.9). A memory
+/// that fits its share enters even when the entries left no room: the lowest-ranked items give
+/// way, the body of the last one first and then the item, counted as omitted. A test or a risk
+/// never does (CA-13); when no item is left to give way the memory stays out. `seen` says which
+/// ids this session already received; they are counted in `already_delivered` before anything is
+/// fitted, so the count is room taken like the rest.
 pub fn add_memories(
     env: &mut Envelope,
     items: Vec<crate::model::MemoryItem>,
@@ -290,26 +313,27 @@ pub fn add_memories(
     env.budget.already_delivered += fit.already;
     let requested = env.budget.requested_tokens;
     env.budget.estimated_tokens = requested; // widest value while measuring
-    let base = estimate_tokens(env);
-    let left = requested.saturating_sub(base);
-    let cap = MEMORY_MAX_TOKENS
-        .min(requested * MEMORY_SHARE_PERCENT / 100)
-        .min(left);
+    let cap = MEMORY_MAX_TOKENS.min(requested * MEMORY_SHARE_PERCENT / 100);
+    let mut used = 0;
     for item in items {
-        env.memories.push(item);
-        // Measured on the envelope itself: the item, its comma and the `memories` key.
-        let used = estimate_tokens(env).saturating_sub(base);
-        if env.memories.len() > MEMORY_MAX_ITEMS || used > cap {
-            env.memories.pop();
+        if env.memories.len() == MEMORY_MAX_ITEMS {
             fit.omitted += 1;
             continue;
         }
-        fit.delivered.push(
-            env.memories
-                .last()
-                .map(|m| m.id.clone())
-                .unwrap_or_default(),
-        );
+        let id = item.id.clone();
+        let without = estimate_tokens(env);
+        env.memories.push(item);
+        // Measured on the envelope itself: the item, its comma and the `memories` key.
+        let own = estimate_tokens(env).saturating_sub(without);
+        let before = (env.items.clone(), env.budget.clone());
+        if used + own > cap || !make_room(env, requested) {
+            env.memories.pop();
+            (env.items, env.budget) = before;
+            fit.omitted += 1;
+            continue;
+        }
+        used += own;
+        fit.delivered.push(id);
     }
     env.budget.estimated_tokens = estimate_tokens(env);
     fit

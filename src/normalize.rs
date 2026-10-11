@@ -855,6 +855,16 @@ pub fn symbol_not_found(symbol: &str) -> Entry {
     )
 }
 
+pub fn no_trace_frames() -> Entry {
+    inferred(
+        "from_trace",
+        "no_trace_frames",
+        "the task was read as an error to debug, but it carries no stack trace or compiler \
+         frames; this answer explores the task instead. Paste the trace for the frames' code"
+            .into(),
+    )
+}
+
 /// A limitation the broker concluded, not one ripwire reported.
 fn inferred(verb: &'static str, kind: &'static str, detail: String) -> Entry {
     Entry::Limitation(Limitation {

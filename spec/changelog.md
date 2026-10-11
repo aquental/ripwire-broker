@@ -124,6 +124,9 @@
 | 2026-10-11 04:10 | Sessões de controle do bloco C: num cenário feito para a memória importar, ela foi entregue em todas as sessões que a tinham e o agente fez o mesmo com e sem ela, nos dois hosts (Claude Code: desfez a mudança anterior, 3 de 3 e 3 de 3; Codex: manteve e corrigiu o teste, 2 de 2 e 2 de 2). Nenhum efeito achado; `--memory` segue experimental | [D-179](#d-179--sessões-de-controle-a-memória-chega-e-não-muda-o-que-o-agente-faz) |
 | 2026-10-11 05:20 | A descrição do campo `note` pede também o porquê da mudança. No cenário de controle do D-179, com a nota dizendo "at the user's request", o Claude Code deixou de desfazer a mudança anterior: 0 de 5 sessões com memória, contra 6 de 7 sem memória e 3 de 3 com a nota antiga. É a primeira medição em que a memória muda um resultado. No Codex o cenário não discrimina | [D-180](#d-180--a-nota-diz-por-quê-e-o-claude-code-deixa-de-desfazer-a-mudança) |
 | 2026-10-11 06:30 | Medido o risco do D-180: a nota que diz "at the user's request" não faz o agente hesitar diante de um pedido novo e legítimo de mudar o mesmo valor. Os dois hosts mudaram de imediato, com a nota no envelope ou sem ela (Claude Code 7 de 7, Codex 2 de 2), no mesmo número de passos; para esse pedido a própria leitura deixa a nota de fora (0,45) | [D-181](#d-181--a-nota-com-o-porquê-não-faz-o-agente-hesitar-diante-de-um-pedido-novo) |
+| 2026-10-11 08:16 | Mudança de contrato do §10.9 do PRD jev-mem, em TDD: uma memória que cabe na parte dela (3 registros, 600 tokens, 20% do orçamento) entra mesmo com o orçamento cheio; cedem os itens de menor prioridade, primeiro o corpo do último e depois o item, contado em `budget.omitted`. Riscos e testes nunca cedem (CA-13) e o total nunca passa do orçamento. Conferência real no `ceci_app` (16 sessões, US$ 4,65): 4 notas aceitas pelo classificador, 4 entregues, nenhum `budget_omitted` (antes, 8 de 16 cortadas). O classificador recusou as outras 4 leituras: passa a ser a causa principal | [D-184](#d-184--a-memória-aceita-entra-no-orçamento-cedem-os-itens-de-menor-prioridade) |
+| 2026-10-11 04:12 | Etapa 1 da T5.3: avaliação reduzida no `ceci_app`, 10 sequências (22 sessões), braços A e B, 3 repetições, 132 sessões, US$ 44,47. Acerto na última sessão igual (A 25 de 29, B 23 de 27). Com a memória entregue, a sessão gasta 27% menos tokens e 13% menos tempo (mediana de 7 pares); no conjunto com histórico relevante a mediana cai 3%, abaixo dos 10% do gate, porque a memória chegou em 7 de 25 sessões. O classificador aceitou a nota em 16 leituras e o orçamento cortou 8 delas (`budget_omitted`): a estrutura enche os 2.500 tokens e a memória só leva a sobra. `--memory` não é promovido | [D-183](#d-183--etapa-1-da-t53-a-memória-entregue-corta-o-custo-mas-o-orçamento-a-tira-em-metade-das-leituras) |
+| 2026-10-11 02:00 | Etapa 0 da T5.3, em TDD: no `ripwire-eval`, `"continues": true` faz a sessão partir da árvore que a anterior deixou (commitada), o braço B drena a fila de memória entre sessões, `--shuffle SEED` sorteia a ordem dos braços, o registro ganha `position`, `finish_calls` e `finish_notes`, e `--memory-debug-log` guarda o log da memória ao lado do transcript. A fumaça no `ceci_app` achou um defeito: `context_for_task` com `mode: debug` e sem stack trace devolvia `upstream_refused` e a memória nem era lida; agora explora a tarefa, com a limitação `no_trace_frames`. E um resultado: nas 3 leituras feitas, a nota não foi entregue (a medida ficou em 0,59, contra a barra de 0,60) | [D-182](#d-182--etapa-0-da-t53-o-instrumento-encadeia-sessões-e-o-debug-sem-trace-explora) |
 | 2026-10-06 15:52 | A barra mostra o servidor vivo do workspace: `[jev:N]` (requisições ao Jev), com `--memory` `[mem: retr N, stor M]` (leituras e gravações da memória), nos últimos 5 s, e `(online)` no fim; um arquivo por processo `serve`, renovado a cada 10 s e ignorado depois de 30 s | [D-154](#d-154--o-servidor-na-barra-jev-memória-e-online) |
 | 2026-10-06 15:15 | Repositório migrado da organização `CeciApp` para a conta `aquental`: remoto `origin` atualizado, URLs do diagrama de arquitetura trocadas, histórico (D-054, D-055) mantido | [D-153](#d-153--migração-do-repositório-para-aquental) |
 | 2026-10-05 00:30 | Achados baixos da memória, segunda parte, e do eval, em TDD: lease só sai livre e `finish` velho não assenta nada, somas da quota saturam, `memory retry` alcança jobs adiados, ingest perto do teto toma o que cabe, pânico do worker dito (grupo 3); guarda de shell que vê opções, palavras-chave, `-lc`, `xargs` e `find -exec`, `{repo}`/`{fix}` como uma palavra, `spent` só em braço com memória, ids de tarefa recusados, CLI do `ripwire-eval`, `history_incomplete` fora das médias, sessão cortada pela API inválida e prompt longo que segurava o timeout (grupo 3) | [D-151](#d-151--achados-baixos-da-memória-segunda-parte-e-do-eval) |
@@ -8509,3 +8512,231 @@ era o erro, a nota impediu; no cenário em que mudar era o certo, não atrapalho
 
 **Custo.** Onze sessões do Claude Code, US$ 1,50, e quatro do Codex na conta do
 mantenedor. Só documentos mudam nesta entrada.
+
+## D-182 — Etapa 0 da T5.3: o instrumento encadeia sessões, e o `debug` sem trace explora
+
+**O plano**, aceito pelo mantenedor: antes da rodada da T5.3, uma avaliação reduzida (10 sequências
+num repositório real de porte médio, o `ceci_app`, braços A e B), e antes dela fechar o que o
+instrumento não fazia. Esta entrada é o instrumento e o que a fumaça mostrou.
+
+**O que o `ripwire-eval` passou a fazer.**
+
+- **Sessão que continua a anterior.** Uma tarefa com `"continues": true` não refaz o checkout do
+  `base`: parte da árvore que a sessão anterior da sequência deixou, commitada como "earlier
+  session" (um usuário commita entre duas sessões). O que a sessão mudou é medido a partir desse
+  commit. Sem isso a sessão seguinte via o patch de referência, não o que o agente fez, e a fonte
+  da memória não batia com o arquivo. Só vale para quem tem uma sessão anterior na mesma
+  sequência; uma sessão anterior inválida marca `history_incomplete` em qualquer braço.
+- **Dreno entre sessões.** Depois de uma sessão do braço B que tem outra em seguida, o runner roda
+  `memory drain --online` (até 5 vezes, enquanto houver job) antes de medir o gasto: a sessão
+  seguinte encontra a anterior ingerida, e o custo entra como ingestão da sessão que o causou. O
+  braço C não é drenado, porque o dreno enriquece. Na fumaça: 6 a 7 requisições por sessão, zero
+  jobs deixados.
+- **Ordem sorteada.** `--shuffle SEED` tira a ordem dos braços de cada tarefa (ou sequência) e
+  repetição de um digest da semente; a mesma semente dá as mesmas ordens. O registro traz
+  `position`.
+- **A nota, por sessão.** `finish_calls` e `finish_notes`: quantas vezes o agente chamou
+  `context_before_finish` e quantas com nota. Sem nota a sessão não deixa nada que uma seguinte
+  receba.
+- **Log da memória.** `--memory-debug-log` liga a flag nos servidores dos braços de memória e no
+  dreno e copia o `debug.log` do store para `transcripts/<sessão>.memory.log`.
+
+**Testes** (`tests/eval.rs`, 7 novos): a sessão que continua, a validação de `continues`, o
+histórico incompleto fora dos braços de memória, o dreno (um só, no braço B, entre as duas sessões,
+com o workspace e o store da sessão), o sorteio, a contagem da nota e o log. 11 mutações do código
+novo, 11 mortas.
+
+**O defeito que a fumaça achou.** Pedido "o teste X está falhando, faça passar": o Claude Code
+chamou `context_for_task` com `mode: "debug"`, sem stack trace no texto. O broker mandava a tarefa
+ao `from_trace`, o ripwire recusava ("no stack-trace / sanitizer / compiler frames found") e a
+chamada inteira voltava como `upstream_refused`: nenhum contexto e nenhuma leitura de memória.
+Agora uma recusa do `from_trace` cai para `explore`, com a limitação `no_trace_frames`, como o
+símbolo inexistente já fazia (D-044). Teste `debug_asked_without_a_trace_explores_the_task_instead_of_failing`
+(`tests/broker.rs`); 2 mutações, uma sobreviveu e o teste foi apertado (a origem dos itens é
+`explore`).
+
+**A fumaça** (sequência `usd`: a sessão 1 muda o padrão de `Money.format_usd_micros/2` de 2 para 4
+casas, a pedido do financeiro; entre as sessões aparece um teste que espera 2; a sessão 2 recebe
+"faça o teste passar"; acerta quem não desfaz a mudança). Claude Code 2.1.296, 14 sessões, US$ 5,40.
+
+| Braço | Sessões 2 | Manteve a mudança | Memória entregue |
+|---|---|---|---|
+| A, sem memória | 3 | 1 | — |
+| B, com memória | 4 | 1 | 0 de 4 leituras |
+
+- A sessão 1 deixou nota em 7 de 7, com o porquê ("at the finance team's request").
+- **A nota não foi entregue nenhuma vez.** Uma leitura falhou pelo defeito acima. Nas outras três
+  o Jev foi consultado e nada passou da barra. Reproduzida à mão com o log do Jev: a nota recebeu
+  0,59 em "contém um fato necessário para responder à consulta", contra a barra de 0,60 (e 0,83 em
+  "acrescenta um detalhe relevante", que não decide a entrada). A consulta era o texto que o
+  agente passou: "Failing test … for lib/ceci_app/core/money.ex (USD money handling); make it
+  pass". É uma ordem de trabalho, não uma pergunta; a nota não é necessária para "responder", é
+  necessária para não errar.
+- A única sessão do braço B que manteve a mudança foi a que não leu memória nenhuma: o agente
+  achou a decisão no `@doc` e no commit anterior. Nos dois braços o histórico do git e os
+  comentários do próprio código dizem o que mudou e por quê; neste repositório o agente da sessão
+  1 escreve o motivo no `@doc`.
+- A memória automática do próprio Claude Code está ligada em `-p` (o evento `init` traz
+  `memory_paths.auto`, por diretório). O diretório é o mesmo para as sessões de uma sequência e
+  diferente entre braços. Nas sessões da fumaça ficou vazio; a análise da rodada confere.
+- Custo por sessão: US$ 0,21 a 0,58 (média 0,39), 28 a 81 s.
+
+**O que isso muda.** O D-180 mediu o efeito num repositório de dois arquivos, onde a nota entrou
+com 0,65 a 0,81. No primeiro cenário de um repositório real ela ficou um centésimo abaixo da
+barra. A barra não foi mexida (PRD §10). O que a rodada reduzida vai dizer primeiro é a taxa de
+entrega em dez cenários; sem entrega, o braço B é o braço A mais o custo.
+
+**Não feito.** O braço C sem dreno; cache frio e quente separados; leitor de transcrição do
+Codex; pontuações da leitura no `debug.log` (hoje só `kept=N`; as pontuações saem do `--log`).
+
+## D-183 — Etapa 1 da T5.3: a memória entregue corta o custo, mas o orçamento a tira em metade das leituras
+
+**Contexto.** Etapa 1 do plano da T5.3 (D-182): avaliação reduzida num repositório real antes da
+rodada completa. Repositório `ceci_app` (Elixir/Phoenix, 228 `.ex`), 10 sequências, 22 sessões,
+braços A (`broker-online`) e B (`broker-memory`), 3 repetições, ordem dos braços sorteada
+(`--shuffle 1`), `--memory-debug-log`. Agente: Claude Code 2.1.296, `claude-opus-5-5`.
+
+**O corpus.** Cinco sequências em que um teste posterior contradiz uma mudança deliberada e
+desfazê-la é o erro (`usd`, `phone`, `cpf`, `ports`, `range`); duas de memória irrelevante
+(`keks`, `blank`); uma de repetição (`again`); uma de fato obsoleto (`zero`, 3 sessões); uma de
+renomeação (`rename`, 3 sessões). Todo check falha na base e passa com a mudança de referência.
+
+**Resultado.** 132 sessões, US$ 44,47 (14,23 + 15,21 + 15,03), 5 inválidas, 6 com histórico
+incompleto, nenhum job de memória deixado na fila.
+
+| Medida | A | B |
+|---|---|---|
+| Acerto na última sessão | 25 de 29 | 23 de 27 (Fisher p = 1,0) |
+| Sessões que deixaram nota | 59 de 65 | 55 de 62 |
+| `context_for_task`, p50 | 1.632 ms | 1.665 ms |
+| Sessões posteriores, mediana de tokens | 197.868 | 194.567 |
+| Sessões posteriores, mediana de tempo | 43,6 s | 44,5 s |
+
+Pareando cada sessão posterior de B com a de A na mesma repetição (30 pares válidos):
+
+| Pares | n | Tokens B/A (mediana) | Tempo B/A (mediana) |
+|---|---|---|---|
+| Memória entregue | 7 | 0,73 (de 0,44 a 0,87) | 0,87 |
+| Memória não entregue | 23 | 1,00 (de 0,78 a 1,73) | 1,02 |
+| Com histórico relevante | 25 | 0,97 | 1,00 |
+
+Por repetição, no conjunto com histórico relevante: 0,85 (5 entregas), 1,20 (1 entrega),
+0,97 (1 entrega). A ordem do braço não pesou (26 de 30 e 25 de 30 por posição). A memória
+automática do Claude Code ficou vazia em todos os diretórios da rodada.
+
+**Leitura contra os gates do PRD §14.**
+
+- Acerto de B não inferior ao de A: **atendido**, sem poder estatístico para mais que isso. O
+  agente sem memória chega ao resultado certo pelo `@doc` e pelo git do `ceci_app`.
+- Mediana de pelo menos 10% menos tokens nas tarefas com histórico relevante: **não atendido**
+  (3%). Onde a memória chega o ganho é de 27%; ela chega em 7 de 25.
+- Sem regressão de latência acima de 5%: **atendido** (tempo 1,00; `context_for_task` +33 ms).
+- Memória irrelevante fica de fora: **atendido**, 0 entregas em 6 sessões.
+
+**Por que a memória não chega.** O `debug.log` de cada sessão separa as causas. Das 30 sessões
+posteriores de B com histórico relevante (25 pareadas e válidas, 5 fora da comparação), 8
+receberam a memória e 22 não:
+
+- **O orçamento cortou 8.** O classificador aceitou a nota (`kept=1`) e `add_memories` a tirou:
+  `stop_reason: budget_omitted`. A memória cabe no menor entre 600 tokens, 20% do pedido e *o que
+  sobrou do pedido*; o agente pede os 2.500 de padrão, a estrutura é aparada até ~2.300 e sobram
+  100 a 200 tokens. A nota com o porquê (D-180) não cabe. Entrar ou não depende de quanto a
+  estrutura ocupou naquela chamada: `usd-2` entrou na repetição 1 e foi cortada nas 2 e 3;
+  `range-2` idem. Foi num desses cortes que B errou (`usd-2`, repetição 3).
+- **O classificador recusou 10** (`ports` 3, `rename-2` 3, `zero-2` 3, `cpf-2` 1): a barra de 0,60 com a
+  pergunta "contém um fato necessário para responder", feita a uma instrução de trabalho.
+- **A fonte mudou em 4** (`stale_omitted`): `rename-3` nas repetições 2 e 3, `phone-2` e `zero-3`
+  na repetição 2. Certo para `rename` (o símbolo mudou de nome); a conferir nos outros dois.
+
+**Decisão.** `--memory` **não é promovido** com este resultado: o gate de custo não foi atendido.
+A barra de entrada não é tocada (§10). O corte pelo orçamento é o primeiro defeito a tratar,
+porque é o único em que o produto já decidiu que a memória é relevante e a descarta mesmo assim,
+e porque sozinho levaria as entregas de 7 para 14 nos 25 pares. A regra "a memória é o que cede"
+(§10.9) foi escrita para a memória não expulsar um item; aqui ela faz a memória perder para a
+*folga* de um orçamento que a estrutura enche por construção. Reservar a parte da memória antes
+de aparar a estrutura é mudança de contrato e pede decisão própria.
+
+**Achados secundários.**
+
+- `ports` falha nos dois braços nas 3 repetições (0 de 6): o cenário não discrimina e sai do
+  corpus ou é reescrito antes da rodada completa.
+- 5 sessões inválidas em 132; a de causa conferida (`rename-1`, braço B, repetição 1) foi o agente
+  rodando `graft` pelo shell. Uma sessão inválida no começo custa a sequência inteira do braço.
+- O registro (`memories_delivered`) e o log (`kept=N`) contam coisas diferentes: aceito pelo
+  classificador e entregue no envelope. A análise precisa dos dois; o `stop_reason` devia ir
+  para o registro.
+
+**Não feito.** A correção do corte pelo orçamento; a etapa 2 (rodada completa, braço C, cache
+frio e quente); a etapa 3 (Codex). Os resultados brutos estão no scratchpad da sessão, não no
+repositório.
+
+## D-184 — A memória aceita entra no orçamento: cedem os itens de menor prioridade
+
+**Contexto.** O D-183 mostrou que metade das notas aceitas pelo classificador (8 de 16) era
+cortada por `add_memories`: a memória só podia ocupar o que sobrava do orçamento, e a estrutura,
+preenchida em paralelo com a leitura, o enche por construção. Decisão do usuário: mudar o
+contrato do §10.9.
+
+**Decisão.** A parte da memória não muda: 3 registros, 600 tokens, 20% de `budget_tokens`. O que
+muda é de onde vem o espaço. Uma memória que cabe na parte dela **entra mesmo com o orçamento
+cheio**, e a cauda dos itens cede:
+
+1. o último item perde o corpo (`content`), como o `fill` já faz quando um item não cabe inteiro;
+2. se não basta, o item sai, contado em `budget.omitted`, com `truncated` e `next_step`;
+3. repete com o item anterior, até caber.
+
+Riscos e testes nunca cedem (CA-13 continua valendo como estava escrito). Se os itens acabam e
+ainda não cabe, a memória fica de fora, os itens e as contagens voltam ao que eram, e a leitura
+sai como `budget_omitted`. O total nunca passa do orçamento.
+
+**Alternativas descartadas.**
+
+- *Reservar a parte da memória antes de preencher a estrutura.* A leitura corre em paralelo e
+  não se sabe se trará algo; a reserva tiraria 20% da estrutura em toda chamada, e três em cada
+  quatro leituras não entregam nada.
+- *Ler a memória antes da estrutura.* Soma a latência da leitura (centenas de ms) a toda chamada.
+
+Ceder depois custa itens só quando há memória para entregar, e só os de menor prioridade.
+
+**Implementação.** `budget::add_memories` mede cada memória no envelope, confere a parte dela e
+chama `make_room`, que encolhe a cauda dos itens; `memory_reserve` continua reservando só a
+contabilidade da leitura. Nenhuma mudança em `retrieve::attach` nem no formato do envelope.
+
+**Testes** (`tests/broker.rs`): `a_memory_inside_its_share_enters_a_full_envelope_and_the_last_items_give_way`,
+`the_body_of_the_last_item_gives_way_before_the_item_does`,
+`a_memory_never_takes_more_than_its_share_from_the_items`,
+`risks_and_tests_are_never_evicted_to_make_room_for_memory` (reescrito: sem item para ceder, a
+memória fica de fora) e `items_that_could_not_make_enough_room_are_put_back`. As propriedades
+"nunca passa do orçamento" (`tests/broker.rs`, `tests/props.rs`) seguem valendo sem alteração.
+13 de 13 mutações de `add_memories`/`make_room` mortas. Uma primeira rodada de mutação foi
+descartada: um teste novo já falhava antes de mutar e fazia tudo parecer morto; refeita com a
+base verde, mostrou três sobreviventes, que viraram dois testes e uma simplificação (o limite é
+o orçamento pedido, sem caso especial para envelope já acima dele).
+
+Gates: `fmt`, `clippy` ×2, 863 testes (padrão) e 901 (`online`), todos verdes.
+
+**Conferência real.** Sequências `usd`, `phone`, `cpf` e `range` do corpus do D-183, braço B, 2
+repetições: 16 sessões, US$ 4,65, nenhuma inválida, 8 acertos em 8 últimas sessões.
+
+| Sessão | Classificador | Entregue | Itens que cederam | Tokens do agente |
+|---|---|---|---|---|
+| `phone-2` r1 | aceitou | sim | 2 | 92 mil |
+| `cpf-2` r1 | aceitou | sim | 0 | 152 mil |
+| `cpf-2` r2 | aceitou | sim | 0 | 180 mil |
+| `range-2` r2 | aceitou | sim | 0 | 96 mil |
+| `usd-2` r1, r2 | recusou | — | — | 204 mil, 179 mil |
+| `phone-2` r2 | recusou | — | — | 177 mil |
+| `range-2` r1 | recusou | — | — | 120 mil |
+
+4 aceitas, 4 entregues, nenhum `budget_omitted`. Em três das quatro bastou tirar corpos de itens.
+
+**O que isto não resolve.** O classificador recusou 4 das 8 leituras, em sequências em que tinha
+aceitado 11 de 12 na rodada do D-183: a nota e a pergunta são escritas pelo agente a cada sessão
+e a medida oscila em torno da barra de 0,60. Com o corte pelo orçamento fora do caminho, essa é a
+causa principal de a memória não chegar. A barra não é tocada (§10); o que está em aberto é a
+pergunta de relevância ("contém um fato necessário para responder"), feita a uma instrução de
+trabalho. `--memory` continua sem promoção: o gate de custo do §14 precisa ser medido de novo, com
+o braço A, depois disso.
+
+**Não feito.** Levar o `stop_reason` da leitura ao registro do `ripwire-eval`; reescrever `ports`;
+etapas 2 e 3 da T5.3.

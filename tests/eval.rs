@@ -178,6 +178,7 @@ fn arms_name_their_mcp_server_and_nothing_else() {
     let tools = ripwire_broker::eval::arm::Tools {
         broker: "/bin/rb".into(),
         ripwire: "/bin/rw".into(),
+        memory_debug_log: false,
     };
     let ws = Path::new("/work");
     let st = Path::new("/state");
@@ -1251,6 +1252,7 @@ fn the_memory_arms_parse_and_start_the_right_server() {
     let tools = ripwire_broker::eval::arm::Tools {
         broker: "/bin/rb".into(),
         ripwire: "/bin/rw".into(),
+        memory_debug_log: false,
     };
     let (ws, st) = (Path::new("/work"), Path::new("/state"));
     assert_eq!(Arm::parse("broker-memory"), Some(Arm::BrokerMemory));
@@ -1338,15 +1340,25 @@ while [ $# -gt 0 ]; do
 done
 state=$(sed -n 's/.*"XDG_STATE_HOME":"\([^"]*\)".*/\1/p' "$cfg")
 before=$(grep -c 'expired tokens' src/auth.py)
-echo "$(pwd -P) ${state:--} $before" >> "$LOG"
+dirty=$(git status --porcelain | wc -l | tr -d ' ')
+commits=$(git rev-list --count HEAD)
+echo "$(pwd -P) ${state:--} $before $dirty $commits" >> "$LOG"
 # What the server would leave there.
 if [ -n "$state" ]; then mkdir -p "$state/ripwire-broker"; fi
+# What a server run with --memory-debug-log would write.
+if [ -n "$state" ] && grep -q -- '--memory-debug-log' "$cfg"; then
+  mkdir -p "$state/ripwire-broker/memory/w1"
+  echo "read kept=0 for: $prompt" >> "$state/ripwire-broker/memory/w1/debug.log"
+fi
 # A session that dies before its result.
 case "$prompt" in *BREAK*) echo '{"type":"system","subtype":"init","tools":[],"mcp_servers":[]}'; exit 0;; esac
 servers='[{"name":"ripwire-broker","status":"connected"}]'
 echo "{\"type\":\"system\",\"subtype\":\"init\",\"tools\":[\"Read\",\"Edit\"],\"mcp_servers\":$servers}"
+# A session that changes nothing.
+case "$prompt" in *IDLE*) ;; *)
 echo '{"type":"assistant","message":{"id":"m2","content":[{"type":"tool_use","id":"t2","name":"Edit","input":{"file_path":"src/auth.py"}}]}}'
 echo "# expired tokens are rejected" >> src/auth.py
+;; esac
 echo '{"type":"result","subtype":"success","is_error":false,"duration_ms":5,"total_cost_usd":0.01,"usage":{"input_tokens":10,"output_tokens":5}}'
 "##,
     );
@@ -2127,4 +2139,326 @@ fn the_bars_compare_the_same_tasks_and_skip_what_has_no_reference_tests() {
     let mut plain = rec(0, 1, Arm::None, 1, 1);
     plain.presented_recall = None;
     assert_eq!(report::arm_stats(&[plain], "none").presented_recall, None);
+}
+
+// --- sessions of one history (PRD jev-mem §14; T5.3) ---
+
+fn continuing(mut task: Value) -> Value {
+    task["continues"] = json!(true);
+    task
+}
+
+#[test]
+fn a_session_that_continues_starts_from_what_the_previous_one_left() {
+    let repo = common::sample_repo();
+    let head = git(repo.path(), &["rev-parse", "HEAD"]);
+    let commits: u32 = git(repo.path(), &["rev-list", "--count", "HEAD"])
+        .parse()
+        .unwrap();
+    let mut idle = continuing(auth_task("third", repo.path(), &head, Some("login")));
+    idle["prompt"] = json!("IDLE: nothing to change");
+    let runs = logged_run(
+        json!([
+            auth_task("first", repo.path(), &head, Some("login")),
+            continuing(auth_task("second", repo.path(), &head, Some("login"))),
+            idle,
+        ]),
+        "broker,broker-memory",
+        "1",
+    );
+    for arm in ["broker", "broker-memory"] {
+        let of: Vec<&(Vec<String>, Value)> = runs.iter().filter(|(_, r)| r["arm"] == arm).collect();
+        let (first, second, third) = (of[0], of[1], of[2]);
+        assert_eq!(first.0[2], "0", "{arm}: the first starts at its base");
+        assert_eq!(second.0[0], first.0[0], "{arm}: the same place");
+        assert_eq!(second.0[2], "1", "{arm}: the first session's edit is there");
+        assert_eq!(
+            second.0[3], "0",
+            "{arm}: committed, so the tree starts clean"
+        );
+        assert_eq!(
+            second.0[4],
+            (commits + 1).to_string(),
+            "{arm}: one commit per earlier session"
+        );
+        assert_eq!(third.0[2], "2", "{arm}: and the second's");
+        assert_eq!(third.0[4], (commits + 2).to_string(), "{arm}");
+        // What a session changed is measured from where it started, not from the task's base.
+        assert_eq!(second.1["file_recall"], 1.0, "{arm}: {}", second.1);
+        assert_eq!(third.1["file_recall"], 0.0, "{arm}: {}", third.1);
+        // The broker's arms say whether the agent closed with a note; this stand-in never does.
+        assert_eq!(first.1["finish_calls"], 0, "{arm}: {}", first.1);
+        assert_eq!(first.1["finish_notes"], 0, "{arm}: {}", first.1);
+    }
+    let source = git(repo.path(), &["status", "--porcelain"]);
+    assert_eq!(source, "", "the source repository is never touched");
+}
+
+#[test]
+fn a_session_can_only_continue_an_earlier_one_of_its_sequence() {
+    let repo = common::sample_repo();
+    let head = git(repo.path(), &["rev-parse", "HEAD"]);
+    let work = tempfile::tempdir().unwrap();
+    let out = run_in(
+        work.path(),
+        json!([
+            continuing(auth_task("alone", repo.path(), &head, None)),
+            continuing(auth_task("opens", repo.path(), &head, Some("s"))),
+            continuing(auth_task("follows", repo.path(), &head, Some("s"))),
+        ]),
+        "broker",
+        &[],
+    );
+    assert!(!out.status.success());
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("alone: continues"), "{err}");
+    assert!(err.contains("opens: continues"), "{err}");
+    assert!(!err.contains("follows"), "{err}");
+    assert_eq!(logged(work.path()), 0, "nothing ran");
+}
+
+#[test]
+fn a_continued_history_is_incomplete_in_any_arm_after_an_invalid_session() {
+    let repo = common::sample_repo();
+    let head = git(repo.path(), &["rev-parse", "HEAD"]);
+    let mut first = auth_task("first", repo.path(), &head, Some("login"));
+    first["prompt"] = json!("BREAK before the result");
+    let runs = logged_run(
+        json!([
+            first,
+            continuing(auth_task("second", repo.path(), &head, Some("login")))
+        ]),
+        "broker",
+        "1",
+    );
+    assert_eq!(runs[1].1["history_incomplete"], true, "{}", runs[1].1);
+}
+
+/// A stand-in broker: every call goes to `$LOG` as `BROKER <state> <args>`; `memory status`
+/// reports one observation waiting until `memory drain` has run.
+fn draining_broker(dir: &Path) -> std::path::PathBuf {
+    let path = dir.join("draining-broker");
+    let drained = dir.join("drained");
+    common::write_executable(
+        &path,
+        format!(
+            r##"#!/bin/sh
+case "$1" in --version) echo "stand-in 0"; exit 0;; esac
+echo "BROKER ${{XDG_STATE_HOME:--}} $*" >> "$LOG"
+case "$1 $2" in
+  "memory drain") touch '{d}';;
+  "memory status")
+    pending=1; [ -e '{d}' ] && pending=0
+    echo "{{\"attempts_24h\":0,\"questions_24h\":0,\"pending\":$pending,\"jobs_pending\":0}}";;
+esac
+"##,
+            d = drained.display()
+        ),
+    );
+    path
+}
+
+#[test]
+fn the_classifier_arm_drains_its_memory_before_the_next_session() {
+    let repo = common::sample_repo();
+    let head = git(repo.path(), &["rev-parse", "HEAD"]);
+    let work = tempfile::tempdir().unwrap();
+    let broker = draining_broker(work.path());
+    let out = run_in(
+        work.path(),
+        json!([
+            auth_task("first", repo.path(), &head, Some("login")),
+            auth_task("second", repo.path(), &head, Some("login")),
+        ]),
+        "broker-online,broker-memory,broker-memory-deterministic",
+        &["--broker", broker.to_str().unwrap()],
+    );
+    assert!(out.status.success(), "{out:?}");
+    let log = std::fs::read_to_string(work.path().join("log")).unwrap();
+    // Sessions and drains, in the order they happened.
+    let steps: Vec<&str> = log
+        .lines()
+        .filter(|l| !l.starts_with("BROKER") || l.contains(" memory drain "))
+        .collect();
+    let drains: Vec<(usize, &&str)> = steps
+        .iter()
+        .enumerate()
+        .filter(|(_, l)| l.starts_with("BROKER"))
+        .collect();
+    assert_eq!(
+        drains.len(),
+        1,
+        "one drain, in the classifier's arm: {steps:#?}"
+    );
+    let (at, drain) = drains[0];
+    // online: 0, 1; memory: 2, drain, 4.
+    assert_eq!(at, 3, "between the arm's two sessions: {steps:#?}");
+    let session: Vec<&str> = steps[2].split(' ').collect();
+    // The agent logs its directory resolved (`pwd -P`: `/private/var` on macOS); the round's
+    // place is gone by now, so the two are compared as text.
+    let real = |p: &str| p.trim_start_matches("/private").to_string();
+    let said: Vec<&str> = drain.split(' ').collect();
+    assert_eq!(
+        said[2..],
+        ["memory", "drain", "--workspace", said[5], "--online"],
+        "{drain}"
+    );
+    assert_eq!(
+        real(said[5]),
+        real(session[0]),
+        "the session's own workspace"
+    );
+    assert_eq!(said[1], session[1], "and its store");
+    let records: Vec<Value> = std::fs::read_to_string(work.path().join("out/results.jsonl"))
+        .unwrap()
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    let left = |task: &str, arm: &str| {
+        records
+            .iter()
+            .find(|r| r["task"] == task && r["arm"] == arm)
+            .map(|r| r["memory_jobs_left"].clone())
+            .unwrap()
+    };
+    assert_eq!(left("first", "broker-memory"), 0, "counted after the drain");
+}
+
+/// The arm order of each task·repeat, as recorded, from a run with `extra` flags.
+fn arm_orders(extra: &[&str]) -> Vec<Vec<String>> {
+    let repo = common::sample_repo();
+    let head = git(repo.path(), &["rev-parse", "HEAD"]);
+    let work = tempfile::tempdir().unwrap();
+    let mut args = vec!["--repeats", "6"];
+    args.extend(extra);
+    let out = run_in(
+        work.path(),
+        json!([auth_task("t", repo.path(), &head, None)]),
+        "none,broker",
+        &args,
+    );
+    assert!(out.status.success(), "{out:?}");
+    let records: Vec<Value> = std::fs::read_to_string(work.path().join("out/results.jsonl"))
+        .unwrap()
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    assert_eq!(records.len(), 12);
+    records
+        .chunks(2)
+        .map(|pair| {
+            assert_eq!(pair[0]["repeat"], pair[1]["repeat"], "a repeat runs whole");
+            for (i, r) in pair.iter().enumerate() {
+                assert_eq!(r["position"], i, "its place in the repeat: {r}");
+                let finish = r["arm"] == "broker";
+                assert_eq!(r.get("finish_calls").is_some(), finish, "{r}");
+            }
+            pair.iter()
+                .map(|r| r["arm"].as_str().unwrap().to_string())
+                .collect()
+        })
+        .collect()
+}
+
+#[test]
+fn a_seed_shuffles_the_arms_of_each_repeat_and_gives_the_same_order_again() {
+    let given = vec!["none".to_string(), "broker".to_string()];
+    let plain = arm_orders(&[]);
+    assert!(plain.iter().all(|o| *o == given), "as given: {plain:?}");
+
+    let shuffled = arm_orders(&["--shuffle", "1"]);
+    assert!(shuffled.contains(&given), "{shuffled:?}");
+    assert!(shuffled.iter().any(|o| *o != given), "{shuffled:?}");
+    assert_eq!(
+        arm_orders(&["--shuffle", "1"]),
+        shuffled,
+        "the seed decides"
+    );
+    assert_ne!(arm_orders(&["--shuffle", "2"]), shuffled, "another seed");
+}
+
+#[test]
+fn the_note_given_at_the_finish_is_counted() {
+    let finish = |id: &str, input: Value| {
+        json!({"type": "assistant", "message": {"id": id, "content": [
+            {"type": "tool_use", "id": id, "name": "mcp__ripwire-broker__context_before_finish",
+             "input": input}]}})
+    };
+    let session = |calls: Vec<Value>| {
+        let mut events = vec![json!({"type": "system", "subtype": "init", "tools": [],
+            "mcp_servers": [{"name": "ripwire-broker", "status": "connected"}]})];
+        events.extend(calls);
+        events.push(
+            json!({"type": "result", "subtype": "success", "is_error": false,
+            "duration_ms": 5, "total_cost_usd": 0.01,
+            "usage": {"input_tokens": 1, "output_tokens": 1}}),
+        );
+        let timed: Vec<(u64, Value)> = events.into_iter().map(|e| (0, e)).collect();
+        transcript::summarize(&timed)
+    };
+    let none = session(vec![]);
+    assert_eq!((none.finish_calls, none.finish_notes), (0, 0));
+    let silent = session(vec![finish("a", json!({"changed_files": ["src/a.rs"]}))]);
+    assert_eq!((silent.finish_calls, silent.finish_notes), (1, 0));
+    let blank = session(vec![finish("a", json!({"note": "  "}))]);
+    assert_eq!((blank.finish_calls, blank.finish_notes), (1, 0));
+    let said = session(vec![
+        finish("a", json!({"note": "In src/a.rs, get() now returns None."})),
+        finish("b", json!({})),
+    ]);
+    assert_eq!((said.finish_calls, said.finish_notes), (2, 1));
+}
+
+#[test]
+fn the_memory_debug_log_is_asked_of_the_memory_arms_and_kept_beside_the_transcript() {
+    let tools = |on| ripwire_broker::eval::arm::Tools {
+        broker: "/bin/rb".into(),
+        ripwire: "/bin/rw".into(),
+        memory_debug_log: on,
+    };
+    let args = |arm: Arm, on| {
+        let cfg = arm.mcp_config(&tools(on), Path::new("/work"), Path::new("/state"));
+        cfg["mcpServers"]["ripwire-broker"]["args"].to_string()
+    };
+    for arm in [Arm::BrokerMemory, Arm::BrokerMemoryDeterministic] {
+        assert!(args(arm, true).contains("--memory-debug-log"), "{arm:?}");
+        assert!(!args(arm, false).contains("--memory-debug-log"), "{arm:?}");
+    }
+    assert!(!args(Arm::BrokerOnline, true).contains("--memory-debug-log"));
+
+    let repo = common::sample_repo();
+    let head = git(repo.path(), &["rev-parse", "HEAD"]);
+    let work = tempfile::tempdir().unwrap();
+    let broker = draining_broker(work.path());
+    let out = run_in(
+        work.path(),
+        json!([
+            auth_task("first", repo.path(), &head, Some("login")),
+            auth_task("second", repo.path(), &head, Some("login")),
+        ]),
+        "broker-online,broker-memory",
+        &["--broker", broker.to_str().unwrap(), "--memory-debug-log"],
+    );
+    assert!(out.status.success(), "{out:?}");
+    let kept =
+        |name: &str| std::fs::read_to_string(work.path().join("out/transcripts").join(name)).ok();
+    // The store's log so far, after each session: the second holds the first's lines too.
+    assert_eq!(
+        kept("first__broker-memory__1.memory.log")
+            .unwrap()
+            .lines()
+            .count(),
+        1
+    );
+    assert_eq!(
+        kept("second__broker-memory__1.memory.log")
+            .unwrap()
+            .lines()
+            .count(),
+        2
+    );
+    assert!(kept("first__broker-online__1.memory.log").is_none());
+    let log = std::fs::read_to_string(work.path().join("log")).unwrap();
+    let drain = log.lines().find(|l| l.contains(" memory drain ")).unwrap();
+    assert!(drain.ends_with("--online --memory-debug-log"), "{drain}");
 }

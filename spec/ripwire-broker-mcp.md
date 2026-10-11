@@ -570,7 +570,7 @@ foi injetado.
 
 | Sinal de entrada | Operação principal |
 | --- | --- |
-| Stack trace ou erro estruturado | `from_trace` |
+| Stack trace ou erro estruturado | `from_trace`. Se o ripwire não achar frames (`mode: debug` numa tarefa sem trace), `explore` com a limitação `no_trace_frames` ([D-182](changelog.md#d-182--etapa-0-da-t53-o-instrumento-encadeia-sessões-e-o-debug-sem-trace-explora)) |
 | Nome claro de símbolo | `find_symbol`; `impact` se a tarefa indicar mudança. Se o símbolo não existir, `explore` com a limitação `symbol_not_found` ([D-044](changelog.md#d-044--símbolo-inexistente-cai-para-explore)) |
 | Tarefa conceitual ou multifile | `explore` |
 | Pedido sobre documentação/decisão | `memory_recall` |
@@ -684,8 +684,12 @@ avaliação, [D-141](changelog.md#d-141--recorte-da-fase-5-do---memory-braço-de
 a leitura não pergunta nada ao classificador: entrega as âncoras locais (palavras e arquivos da
 tarefa) cujas fontes não mudaram, com `basis: deterministic_rank`, sem `scores` (ausência não vira
 zero) e com `stop_reason: deterministic`; o servidor continua coletando e incorporando, mas não
-enriquece nem consolida. Memória é relato do passado: não muda `status` e não substitui itens,
-riscos ou testes.
+enriquece nem consolida. Memória é relato do passado: não muda `status` e não substitui
+riscos nem testes. Ela ocupa no máximo 3 registros, 600 tokens e um quinto de `budget_tokens`, e
+dentro dessa parte entra mesmo quando a estrutura encheu o orçamento: cedem os itens de menor
+prioridade, primeiro o corpo do último e depois o item, contado em `budget.omitted`; sem item
+para ceder, a memória fica de fora com `stop_reason: budget_omitted`. O total nunca passa do
+orçamento ([D-184](changelog.md#d-184--a-memória-aceita-entra-no-orçamento-cedem-os-itens-de-menor-prioridade)).
 
 A leitura corre ao lado da parte estrutural de `context_for_task`, dentro de
 `--memory-read-deadline-ms`, com a carga do snapshot, a conferência das fontes e a revalidação

@@ -1064,7 +1064,7 @@ proptest! {
 proptest! {
     #![proptest_config(config())]
 
-    /// Memory takes what is left of the budget and never more: the estimate never grows past it.
+    /// Whatever gives way to memory, the estimate never grows past the budget.
     #[test]
     fn the_memory_budget_is_never_negative_and_never_exceeds_the_total(
         budget in 256u32..20_000, sizes in prop::collection::vec(1usize..2_000, 0..8),

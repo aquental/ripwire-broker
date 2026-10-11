@@ -169,6 +169,47 @@ async fn no_symbol_body_or_test_is_repeated() {
     );
 }
 
+#[tokio::test]
+async fn debug_asked_without_a_trace_explores_the_task_instead_of_failing() {
+    // An agent asked to fix a failing test passes `mode: debug` with no stack trace in the task.
+    let refused = UpstreamError::Refused(
+        "no stack-trace / sanitizer / compiler frames found in `trace` — nothing to map".into(),
+    );
+    let (b, fake, _ws) = broker(
+        FakeUpstream::new()
+            .fail("from_trace", refused)
+            .answer("explore", "explore_export_auth"),
+    )
+    .await;
+    let task = "the test tests/test_auth.py is failing; make it pass";
+
+    let out = to_json(
+        &b.context_for_task(TaskRequest {
+            mode: Mode::Debug,
+            ..TaskRequest::new(task)
+        })
+        .await
+        .unwrap(),
+    );
+
+    assert_eq!(fake.called(), vec!["from_trace", "explore"]);
+    assert_eq!(fake.calls()[1].1["task"], task);
+    assert_eq!(out["intent"], "debug");
+    let items = out["items"].as_array().unwrap();
+    assert!(!items.is_empty(), "{out}");
+    assert!(
+        items.iter().all(|i| i["source"]["verb"] == "explore"),
+        "what explore found is said to come from explore: {out}"
+    );
+    let said = out["limitations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|l| l["kind"] == "no_trace_frames")
+        .unwrap_or_else(|| panic!("{out}"));
+    assert_eq!(said["source"]["verb"], "from_trace");
+}
+
 const PY_TRACE: &str = "Traceback (most recent call last):\n  File \"src/routes.py\", line 9, in home_route\n    return login(req.user, req.token)\n  File \"src/auth.py\", line 7, in login\n    raise ValueError(\"bad token\")\nValueError: bad token";
 
 #[tokio::test]
@@ -2650,25 +2691,173 @@ async fn memory_fits_inside_the_budget_at_most_three_600_tokens_and_20_percent()
 }
 
 #[tokio::test]
-async fn risks_and_tests_are_never_evicted_to_make_room_for_memory() {
+async fn a_memory_inside_its_share_enters_a_full_envelope_and_the_last_items_give_way() {
+    use ripwire_broker::budget::estimate_tokens;
     use ripwire_broker::memory::retrieve::{self, StopReason};
     let mut env = task_envelope(10_000).await;
-    // 60 tokens left: memory's share would allow one small memory, the room left does not.
-    env.budget.requested_tokens = ripwire_broker::budget::estimate_tokens(&env) + 60;
-    let (risks, tests, items) = (env.risks.len(), env.tests.len(), env.items.len());
-    retrieve::attach(&mut env, &read_of(2, 1, StopReason::Sufficient), &|_| false);
-    assert!(
-        env.memories.is_empty(),
-        "no room left: memory is what gives way"
+    // 10 tokens left, as when the entries filled the budget: a memory takes about 115.
+    let read = read_of(1, 20, StopReason::Sufficient);
+    // The read's record is in the count, as the reserve has it in `context_for_task`.
+    env.provenance.memory = Some(retrieve::provenance(&read));
+    env.budget.requested_tokens = estimate_tokens(&env) + 10;
+    let (risks, tests, items) = (env.risks.clone(), env.tests.clone(), env.items.clone());
+    let delivered = retrieve::attach(&mut env, &read, &|_| false);
+    assert_eq!(delivered, ["n0"], "the classifier kept it: it is delivered");
+    assert_eq!(env.memories.len(), 1);
+    assert_eq!(
+        env.provenance.memory.as_ref().unwrap().stop_reason,
+        "sufficient"
     );
     assert_eq!(
-        (env.risks.len(), env.tests.len(), env.items.len()),
-        (risks, tests, items)
+        (&env.risks, &env.tests),
+        (&risks, &tests),
+        "no risk and no test is evicted (CA-13)"
+    );
+    assert!(
+        estimate_tokens(&env) <= env.budget.requested_tokens,
+        "inside the budget: {} > {}",
+        estimate_tokens(&env),
+        env.budget.requested_tokens
+    );
+    // What gave way is the tail of the items: the body of the last one first, then the item.
+    let kept = env.items.len();
+    assert!(kept >= 1, "the best items stay");
+    let untouched = env
+        .items
+        .iter()
+        .zip(&items)
+        .take_while(|(a, b)| a == b)
+        .count();
+    assert!(untouched >= kept - 1, "only the tail changes");
+    assert!(untouched < items.len(), "something gave way");
+    for (now, was) in env.items.iter().zip(&items).skip(untouched) {
+        assert_eq!((&now.path, &now.symbol), (&was.path, &was.symbol));
+        assert!(
+            now.content.is_none() && was.content.is_some(),
+            "only its body went"
+        );
+    }
+    let gone = items.len() - kept;
+    assert_eq!(env.budget.shown, kept + tests.len() + risks.len());
+    assert_eq!(env.budget.omitted, gone, "an item that went is counted");
+    assert_eq!(env.budget.truncated, gone > 0);
+    assert_eq!(env.budget.next_step.is_some(), gone > 0);
+}
+
+#[tokio::test]
+async fn the_body_of_the_last_item_gives_way_before_the_item_does() {
+    use ripwire_broker::budget::estimate_tokens;
+    use ripwire_broker::memory::retrieve::{self, StopReason};
+    let mut env = task_envelope(10_000).await;
+    // The last item carries 150 tokens of body: more than the memory needs.
+    env.items.last_mut().unwrap().content = Some(ripwire_broker::model::Untrusted {
+        untrusted_repository_data: "y".repeat(600),
+    });
+    let read = read_of(1, 20, StopReason::Sufficient);
+    // The read's record is in the count, as the reserve has it in `context_for_task`.
+    env.provenance.memory = Some(retrieve::provenance(&read));
+    env.budget.requested_tokens = estimate_tokens(&env) + 10;
+    let (items, budget) = (env.items.clone(), env.budget.clone());
+    retrieve::attach(&mut env, &read, &|_| false);
+    assert_eq!(env.memories.len(), 1);
+    assert_eq!(env.items.len(), items.len(), "no item went");
+    assert_eq!(env.items[..items.len() - 1], items[..items.len() - 1]);
+    assert!(env.items.last().unwrap().content.is_none(), "its body did");
+    assert_eq!(
+        (env.budget.shown, env.budget.omitted, env.budget.truncated),
+        (budget.shown, budget.omitted, budget.truncated),
+        "an item without its body is still shown"
+    );
+    assert!(estimate_tokens(&env) <= env.budget.requested_tokens);
+}
+
+#[tokio::test]
+async fn a_memory_never_takes_more_than_its_share_from_the_items() {
+    use ripwire_broker::budget::estimate_tokens;
+    use ripwire_broker::memory::retrieve::{self, StopReason};
+    let mut env = task_envelope(10_000).await;
+    env.budget.requested_tokens = estimate_tokens(&env) + 60;
+    let items = env.items.clone();
+    // A fifth of this budget is far less than 500 tokens: outside its share, whatever the room.
+    assert!(env.budget.requested_tokens / 5 < 500);
+    retrieve::attach(&mut env, &read_of(1, 500, StopReason::Sufficient), &|_| {
+        false
+    });
+    assert!(env.memories.is_empty());
+    assert_eq!(
+        env.items, items,
+        "nothing gives way to a memory that stays out"
     );
     assert_eq!(
         env.provenance.memory.as_ref().unwrap().stop_reason,
         "budget_omitted"
     );
+}
+
+/// `task_envelope` cut to its first `items` items, with a risk, padded so that a fifth of the
+/// budget holds a memory, the read's record counted and `room` tokens left.
+async fn full_envelope(
+    items: usize,
+    room: u32,
+    read: &ripwire_broker::memory::retrieve::Read,
+) -> ripwire_broker::model::Envelope {
+    use ripwire_broker::model::{Basis, Limitation, Risk, Source};
+    let source = |verb| Source {
+        verb,
+        basis: Basis::BrokerInference,
+    };
+    let mut env = task_envelope(10_000).await;
+    env.items.truncate(items);
+    env.risks.push(Risk {
+        kind: "public_api",
+        message: "exported".into(),
+        path: Some("src/routes.ts".into()),
+        symbol: None,
+        source: source("impact"),
+    });
+    env.limitations.push(Limitation {
+        kind: "pad",
+        detail: "y".repeat(4_000),
+        source: source("test"),
+    });
+    env.budget.shown = env.items.len() + env.tests.len() + env.risks.len();
+    env.provenance.memory = Some(ripwire_broker::memory::retrieve::provenance(read));
+    env.budget.requested_tokens = ripwire_broker::budget::estimate_tokens(&env) + room;
+    // As `add_memories` leaves it: measured with the widest value in place.
+    env.budget.estimated_tokens = env.budget.requested_tokens;
+    env.budget.estimated_tokens = ripwire_broker::budget::estimate_tokens(&env);
+    env
+}
+
+#[tokio::test]
+async fn risks_and_tests_are_never_evicted_to_make_room_for_memory() {
+    use ripwire_broker::memory::retrieve::{self, StopReason};
+    let read = read_of(1, 20, StopReason::Sufficient);
+    // Inside its share, 10 tokens left and no item to give way: the memory is what stays out.
+    let mut env = full_envelope(0, 10, &read).await;
+    let before = env.clone();
+    retrieve::attach(&mut env, &read, &|_| false);
+    assert!(env.memories.is_empty(), "no room and no item to give it");
+    assert_eq!((&env.risks, &env.tests), (&before.risks, &before.tests));
+    assert_eq!(env.budget, before.budget);
+    assert_eq!(
+        env.provenance.memory.as_ref().unwrap().stop_reason,
+        "budget_omitted"
+    );
+}
+
+#[tokio::test]
+async fn items_that_could_not_make_enough_room_are_put_back() {
+    use ripwire_broker::memory::retrieve::{self, StopReason};
+    let read = read_of(1, 20, StopReason::Sufficient);
+    // One item, with a body: all of it is less than the memory needs.
+    let mut env = full_envelope(1, 10, &read).await;
+    let before = env.clone();
+    assert!(before.items[0].content.is_some());
+    retrieve::attach(&mut env, &read, &|_| false);
+    assert!(env.memories.is_empty());
+    assert_eq!(env.items, before.items, "the item is back, body and all");
+    assert_eq!(env.budget, before.budget, "and so are the counts");
 }
 
 #[tokio::test]

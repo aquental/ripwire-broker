@@ -218,6 +218,25 @@ Os instrumentos estão prontos; as medições, não.
   medição em que a memória muda um resultado. No Codex o cenário não discrimina: ele já mantinha
   a mudança sem memória. **O que segura a promoção agora** é a T5.3 (se isso vale fora de um
   cenário) e um caso que discrimine no Codex.
+- **A memória aceita entra no orçamento (D-184).** Contrato novo do §10.9: dentro da parte dela
+  (3 registros, 600 tokens, 20%), a memória entra mesmo com o orçamento cheio e os itens de menor
+  prioridade cedem, corpo primeiro; riscos e testes nunca. Conferência real: 4 notas aceitas, 4
+  entregues, nenhum `budget_omitted`. O classificador recusou as outras 4 leituras: a pergunta de
+  relevância é o próximo ponto, e o gate de custo do §14 precisa de nova medida com o braço A.
+- **Etapa 1 da T5.3 (D-183): `--memory` não é promovido; o orçamento corta metade das notas
+  aceitas.** Avaliação reduzida no `ceci_app` (132 sessões, US$ 44,47): acerto igual nos dois
+  braços; com a memória entregue a sessão gasta 27% menos tokens, mas ela chega em 7 de 25
+  sessões com histórico relevante e a mediana do conjunto cai só 3% (gate: 10%). Em 8 leituras o
+  classificador aceitou a nota e `add_memories` a tirou (`budget_omitted`): a estrutura enche os
+  2.500 tokens e a memória leva a sobra. Próximo passo: decidir como a memória entra no
+  orçamento, e só então a etapa 2.
+- **Etapa 0 da T5.3 (D-182): o instrumento encadeia sessões, e a primeira fumaça num repositório
+  real não entregou a nota.** `ripwire-eval` ganhou `"continues": true`, o dreno do braço B entre
+  sessões, `--shuffle`, `finish_notes` e `--memory-debug-log`. A fumaça no `ceci_app` achou e
+  corrigiu um defeito (`mode: debug` sem stack trace devolvia erro e a memória nem era lida;
+  agora explora, com `no_trace_frames`) e mostrou que a nota, escrita em 7 de 7 sessões, não foi
+  entregue em nenhuma leitura: 0,59 contra a barra de 0,60. A avaliação reduzida (10 sequências,
+  braços A e B) diz a taxa de entrega em dez cenários.
 - **A nota com o porquê não faz o agente hesitar (D-181).** Era o risco do D-180. Pedido novo e
   legítimo de mudar o mesmo valor: os dois hosts mudaram de imediato, com a nota no envelope ou
   sem ela, no mesmo número de passos. Para esse pedido a própria leitura deixa a nota de fora

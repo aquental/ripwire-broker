@@ -328,7 +328,7 @@ Cache só de decisões, separado do cache semântico atual: chave inclui workspa
 | Read de memória | deadline 850 ms (era 750; D-156); p95 ≤850 ms, retorno/cancelamento observado p99 ≤900 ms no cenário de teste |
 | Read: HTTP | máximo 4 tentativas totais, cada uma ≤450 ms (era 250; D-156) e ≤tempo restante, contados do envio: a espera por vaga entre os pedidos em voo sai só do deadline; zero retries automáticos. Prazo esgotado antes de o Jev validar qualquer memória: entrega as âncoras locais com `basis: deterministic_rank`, sem `scores`, e `degraded: true`; erro do provedor não entrega nada |
 | Read: grafo | 12 expansões, 16 nós examinados/scorados, profundidade 2, 128 arestas inspecionadas, beam 4 |
-| Contexto de memória | até 3 registros, até 600 tokens estimados e até 20% do budget total; cabe dentro, nunca soma acima dele |
+| Contexto de memória | até 3 registros, até 600 tokens estimados e até 20% do budget total; cabe dentro, nunca soma acima dele. Dentro dessa parte a memória entra mesmo com o budget cheio: cedem os itens de menor prioridade, primeiro o corpo do último e depois o item (contado como omitido); se não houver item para ceder, a memória fica de fora (`budget_omitted`) (D-184) |
 
 SLO não é garantia de preempção de syscall de disco. I/O bloqueante deve rodar em executor limitado; não iniciar tarefa ilimitada a cada timeout. Publicação tardia usa o mesmo ID e é reconciliada; métricas separam confirmado, não confirmado e rejeitado. Reader cold com snapshot grande pode estourar o prazo: omite memória com limitação e aquece para próximas chamadas, sem travar contexto estrutural.
 
@@ -439,7 +439,7 @@ Gates propostos para sair de experimental: zero violação de isolamento/segredo
 10. Ledger de perguntas/tentativas impede ultrapassar tetos inclusive em retries; batch não oculta trabalho. Testar 0, 4 e 10 candidatos e os limites calculados no §8.3.
 11. Retenção e forget removem pais/descendentes/cache/jobs; resposta em voo não recria conteúdo. Disco cheio/corrupção mantém contexto estrutural disponível.
 12. Todos os stop_reason têm teste; deadline corta HTTP e loops locais cooperativamente; truncamento posterior não conserva suficiência indevida.
-13. Memória compartilha budget total, no máximo 20%/600 tokens e 3 itens; riscos/testes estruturais não são expulsos para acomodá-la.
+13. Memória compartilha budget total, no máximo 20%/600 tokens e 3 itens; riscos/testes estruturais não são expulsos para acomodá-la. Itens de menor prioridade cedem lugar a uma memória que cabe na parte dela (D-184).
 14. Só merge/promote com gate válido aciona sumarizador; pais permanecem; saída inválida/timeout não altera fonte ou gate de conclusão.
 15. MCP text/structuredContent e hooks entregam memória sem depender de role desconhecida; teste real por host comprova consumo do contexto, com versão registrada.
 16. Avaliação A/B/C reproduzível distingue retenção, controle Jev e atuação do agente; não transfere números LoCoMo nem compara com Mem0 sem experimento.

@@ -178,7 +178,8 @@ whole answer. The minimum budget is 256; with `--online`, `context_for_task` nee
 
 When `context_for_task` reads a word as a symbol that the repository doesn't have (for
 example a host's tool name in the prompt), it explores the task instead and adds the
-limitation `symbol_not_found`. An empty `task` is `invalid_input`. `context_after_edit` checks at
+limitation `symbol_not_found`. Asked for `mode: debug` with no stack trace in the task (a failing
+test to fix), it does the same, with the limitation `no_trace_frames`. An empty `task` is `invalid_input`. `context_after_edit` checks at
 most five `symbols`; the rest are named in a `symbols_truncated` limitation. An `item_truncated`
 limitation appears only for a body the answer actually shows.
 
@@ -514,7 +515,10 @@ weights; `memory drain` makes decisions and links but no notes.
 
 **Reading:** with `--memory`, `context_for_task` reads memory alongside the structural context
 and adds at most three memories (600 tokens, a fifth of the budget) in a `memories` field, with
-`provenance.memory` saying why the read stopped and what it cost. Memory never fails the tool and
+`provenance.memory` saying why the read stopped and what it cost. A memory inside that share
+enters even when the structural context filled the budget: the lowest-ranked items give way
+(the body of the last one first, then the item, counted in `budget.omitted`); tests and risks
+never do, and the total never passes `budget_tokens`. Memory never fails the tool and
 never changes `status`. When it is missing the answer says why: `memory_cold` (a large snapshot
 is still loading; the next call finds it warm), `memory_unavailable` (the store cannot be read)
 or `memory_incomplete` (the provider failed, time ran out, or the store changed under the read,
@@ -854,12 +858,12 @@ nothing to the broker's own command line. Plan and decisions in
 cargo build --release
 ./target/release/ripwire-eval check    --corpus corpus.json
 ./target/release/ripwire-eval validate --corpus corpus.json
-./target/release/ripwire-eval run      --corpus corpus.json --out ab/ [--arms none,ripwire,broker] [--repeats 3]
+./target/release/ripwire-eval run      --corpus corpus.json --out ab/ [--arms none,ripwire,broker] [--repeats 3] [--shuffle SEED] [--memory-debug-log]
 ./target/release/ripwire-eval report   --out ab/ [--json]
 ```
 
 - **Corpus:** JSON, `{"tasks": [{"id", "repo", "base", "fix", "prompt", "vocabulary_diverges", "reference":
-  {"files", "tests"}, "check", "setup", "teardown", "env", "sequence"}]}`. `id` names the run's files, so it takes letters, digits, `.`, `_` and `-`
+  {"files", "tests"}, "check", "setup", "teardown", "env", "sequence", "continues"}]}`. `id` names the run's files, so it takes letters, digits, `.`, `_` and `-`
   only, and does not start with `.`. `repo` is a local git repository (relative to
   the corpus file), `base` the commit the agent starts from, `fix` the reference commit, `reference.files` what
   it modifies, and `check` a shell command whose exit 0 means the task was solved. `setup` prepares the copy
@@ -869,11 +873,22 @@ cargo build --release
   `env` values take `{run}` only, since the agent would see the others. Tasks taken from real commits get their reference for free, and their
   tests become hidden tests: `git -C {repo} show {fix}:test/x_test.exs > test/x_test.exs && mix test test/x_test.exs`.
   Tasks with the same `sequence` are sessions of one history, for the memory arms: they run in corpus order,
-  each from its own `base`, in the same place and with the same memory store for a given arm and repeat; a
+  each from its own `base`, or, with `"continues": true`, from the tree the previous session left (committed
+  as "earlier session", as a user would between two sessions; what the session changed is then measured from
+  that commit, and an invalid earlier session marks it `history_incomplete` in any arm), in the same place and with the same memory store for a given arm and repeat; a
   sequence is recorded, and resumed, as a whole (one recorded in part stops the run, with the lines to
   remove), stays in one repository, and, in a memory arm, marks a session after an invalid one
   `history_incomplete`, which the report lists and keeps out of the averages. Each arm's history is its own earlier sessions: arms B and C differ in history as well as in selection, and a
-  memory whose source the agent edited is stale in the next session unless its base has the same bytes.
+  memory whose source the agent edited is stale in the next session unless its base has the same bytes
+  (which `continues` gives). Between two sessions of a sequence, arm B's queue is sent with `memory drain
+  --online`, so the next session finds the earlier one ingested instead of racing its own first question; the
+  drain's cost counts as the earlier session's ingestion. Arm C is not drained: the drain enriches.
+- **Order and what a session left:** `--shuffle SEED` draws the order of the arms for each task (or sequence)
+  and repeat from the seed (the same seed, the same orders); each record carries its `position`. With a broker
+  arm, a record also carries `finish_calls` and `finish_notes`: how often the agent called
+  `context_before_finish`, and how often with a note. Without a note, a session leaves nothing a later one is
+  given. `--memory-debug-log` turns the flag on in the memory arms' servers and in the drain, and copies the
+  store's `debug.log` to `transcripts/<session>.memory.log` after each session.
 - **Validation:** `validate` runs each task's check on a copy at the base, where it must fail, and on one at
   the fix, where it must pass. A check that passes at the base measures nothing. The output of every setup
   and check goes to `validate-logs/` next to the corpus; a run's check output goes next to its transcript.

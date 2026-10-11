@@ -45,6 +45,11 @@ pub struct Task {
     /// corpus order, in one place and with one memory store per arm and repeat.
     #[serde(default)]
     pub sequence: Option<String>,
+    /// The session starts from the tree the previous session of its sequence left, committed,
+    /// instead of from `base`: what a later session finds is what the agent did, not the
+    /// reference patch (a memory's source would otherwise not match the file).
+    #[serde(default)]
+    pub continues: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -108,6 +113,17 @@ impl Corpus {
                         t.id
                     ));
                 }
+            }
+            if t.continues
+                && !t
+                    .sequence
+                    .as_deref()
+                    .is_some_and(|s| sequences.contains_key(s))
+            {
+                errors.push(format!(
+                    "{}: continues needs an earlier session of its sequence",
+                    t.id
+                ));
             }
             match t.sequence.as_deref() {
                 Some("") => errors.push(format!("{}: empty sequence name", t.id)),

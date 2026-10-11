@@ -27,6 +27,8 @@ pub enum Arm {
 pub struct Tools {
     pub broker: PathBuf,
     pub ripwire: PathBuf,
+    /// `--memory-debug-log` on the memory arms' servers: why a memory was or was not delivered.
+    pub memory_debug_log: bool,
 }
 
 pub const ALL: [Arm; 6] = [
@@ -95,6 +97,9 @@ impl Arm {
                 json!(rw),
             ];
             args.extend(extra.iter().map(|a| json!(a)));
+            if tools.memory_debug_log && extra.contains(&"--memory") {
+                args.push(json!("--memory-debug-log"));
+            }
             let mut server = json!({"command": tools.broker.to_string_lossy(), "args": args});
             if extra.contains(&"--memory") {
                 server["env"] = json!({"XDG_STATE_HOME": state.to_string_lossy()});
