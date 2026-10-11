@@ -1005,13 +1005,25 @@ impl Broker {
         let entries = match (route.intent, route.symbol.as_deref()) {
             (Intent::Debug, _) => {
                 verbs.push("from_trace");
-                let payload = self
-                    .call(
-                        "from_trace",
-                        json!({"trace": req.task, "budget_tokens": req.budget_tokens}),
-                    )
-                    .await?;
-                normalize::ctx("from_trace", &payload)
+                let trace = json!({"trace": req.task, "budget_tokens": req.budget_tokens});
+                match self.guarded_call("from_trace", trace).await {
+                    Ok(payload) => normalize::ctx("from_trace", &payload),
+                    // `mode: debug` with no trace in the task (a failing test to fix): explore
+                    // instead of failing the whole request, and the memory read with it.
+                    Err(UpstreamError::Refused(_)) => {
+                        verbs.push("explore");
+                        let payload = self
+                            .call(
+                                "explore",
+                                json!({"task": req.task, "budget_tokens": req.budget_tokens}),
+                            )
+                            .await?;
+                        let mut entries = normalize::ctx("explore", &payload);
+                        entries.push(normalize::no_trace_frames());
+                        entries
+                    }
+                    Err(e) => return Err(e.into()),
+                }
             }
             (Intent::Review, _) => {
                 verbs.push("situational_awareness");

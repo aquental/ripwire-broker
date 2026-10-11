@@ -62,6 +62,10 @@ pub struct Summary {
     /// memory read together, as the agent waited for them).
     pub context_calls: u64,
     pub context_ms: u64,
+    /// Calls to `context_before_finish`, and how many of them carried a note (PRD jev-mem §5.2):
+    /// without one, the session leaves nothing a later one is given.
+    pub finish_calls: u64,
+    pub finish_notes: u64,
     /// What the broker's memory reads reported in `provenance.memory`, summed, and the memories
     /// it delivered. `None` when no answer carried a memory read.
     pub memory_read: Option<MemoryRead>,
@@ -352,6 +356,11 @@ fn on_tool_use(
         }
         Class::Mcp => s.calls.mcp += 1,
         Class::Other => s.calls.other += 1,
+    }
+    if name.ends_with("__context_before_finish") {
+        s.finish_calls += 1;
+        let note = block["input"]["note"].as_str().unwrap_or("");
+        s.finish_notes += u64::from(!note.trim().is_empty());
     }
     if name == "Bash"
         && let Some(c) = block["input"]["command"].as_str()

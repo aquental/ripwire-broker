@@ -14,12 +14,15 @@ usage: ripwire-eval check --corpus FILE
        ripwire-eval validate --corpus FILE [--check-timeout-s N]
        ripwire-eval run --corpus FILE --out DIR [--arms none,ripwire,broker[,broker-online,broker-memory,broker-memory-deterministic]]
                     [--repeats N] [--agent-cmd CMD] [--broker BIN] [--ripwire BIN]
-                    [--timeout-s N] [--check-timeout-s N]
+                    [--timeout-s N] [--check-timeout-s N] [--shuffle SEED]
+                    [--memory-debug-log]
        ripwire-eval report --out DIR [--json]
 
 --agent-cmd is split on whitespace and never run through a shell; {mcp_config} and {workdir}
 are replaced per run, and the task's prompt arrives on stdin. The default drives Claude Code
 headless, isolated from your own settings, hooks and MCP servers.
+--shuffle draws the order of the arms for each task (or sequence) and repeat from SEED; a task
+with \"continues\": true starts from the tree the previous session of its sequence left.
 Each run costs whatever the agent spends: a real run of the corpus is paid.";
 
 struct Args {
@@ -36,9 +39,9 @@ fn parse() -> Result<Args, String> {
     let mut help = matches!(command.as_str(), "help" | "-h" | "--help");
     while let Some(flag) = it.next() {
         let value = match flag.as_str() {
-            "--json" => String::new(),
+            "--json" | "--memory-debug-log" => String::new(),
             "--corpus" | "--out" | "--arms" | "--repeats" | "--agent-cmd" | "--broker"
-            | "--ripwire" | "--timeout-s" | "--check-timeout-s" => it
+            | "--ripwire" | "--timeout-s" | "--check-timeout-s" | "--shuffle" => it
                 .next()
                 .ok_or_else(|| format!("{flag} needs a value\n{USAGE}"))?,
             "-h" | "--help" => {
@@ -73,6 +76,8 @@ fn takes(command: &str) -> Option<&'static [&'static str]> {
             "--ripwire",
             "--timeout-s",
             "--check-timeout-s",
+            "--shuffle",
+            "--memory-debug-log",
         ],
         "report" => &["--out", "--json"],
         _ => return None,
@@ -204,9 +209,14 @@ fn run() -> Result<(), String> {
                         .flags
                         .get("--ripwire")
                         .map_or_else(|| PathBuf::from("ripwire"), PathBuf::from),
+                    memory_debug_log: a.flags.contains_key("--memory-debug-log"),
                 },
                 timeout: Duration::from_secs(number(&a, "--timeout-s", 1800)?),
                 check_timeout: Duration::from_secs(number(&a, "--check-timeout-s", 600)?),
+                shuffle: match a.flags.contains_key("--shuffle") {
+                    true => Some(number(&a, "--shuffle", 0)?),
+                    false => None,
+                },
             };
             let made = runner::run(&cfg, &mut |line| eprintln!("{line}"))?;
             eprintln!(

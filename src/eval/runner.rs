@@ -38,6 +38,19 @@ pub struct RunConfig {
     pub tools: Tools,
     pub timeout: Duration,
     pub check_timeout: Duration,
+    /// With a seed, the arms of each task (or sequence) and repeat run in an order drawn from
+    /// it (PRD jev-mem §14); without one, in the order given.
+    pub shuffle: Option<u64>,
+}
+
+/// What a session is within its round.
+#[derive(Clone, Copy)]
+struct Turn {
+    repeat: u32,
+    /// The arm's place among the arms of this round and repeat.
+    position: u32,
+    /// Another session of the sequence follows.
+    followed: bool,
 }
 
 fn git(dir: &Path, args: &[&str]) -> Result<(), String> {
@@ -87,6 +100,30 @@ fn checkout(task: &Task, rev: &str, into: &Path) -> Result<(), String> {
     // FETCH_HEAD names the source repository's path; the agent has no use for it.
     let _ = std::fs::remove_file(into.join(".git/FETCH_HEAD"));
     Ok(())
+}
+
+/// Commits what the previous session of a sequence left in `work`, as a user would between two
+/// sessions, and returns the commit: where the next session starts, and what its edits are
+/// measured from.
+fn commit_session(work: &Path) -> Result<String, String> {
+    git(work, &["add", "--all"])?;
+    git(
+        work,
+        &[
+            "-c",
+            "user.name=ripwire-eval",
+            "-c",
+            "user.email=ripwire-eval@localhost",
+            "commit",
+            "--quiet",
+            "--allow-empty",
+            "--no-verify",
+            "--message",
+            "earlier session",
+        ],
+    )?;
+    let out = super::git(work, &["rev-parse", "HEAD"])?;
+    Ok(String::from_utf8_lossy(&out).trim().to_string())
 }
 
 /// What one agent run left: the timed transcript, or why there is none.
@@ -240,9 +277,53 @@ fn spent(cfg: &RunConfig, work: &Path, state: &Path) -> Option<(u64, u64, u64)> 
     ))
 }
 
-fn record(task: &Task, arm: Arm, repeat: u32, s: &Summary, sc: &score::Score) -> RunRecord {
+/// How often a session's memory is drained before giving up: each drain stops at the server's
+/// own limits (`memory drain`: 20 jobs or 60 s).
+const DRAINS: usize = 5;
+
+/// Sends what the session left in the store's queue (`memory drain --online`), so that the next
+/// session of the sequence finds it ingested: the server's worker stops with its session, and
+/// the next one would otherwise race its own first question. What is still waiting afterwards is
+/// the record's `memory_jobs_left`.
+fn drain(cfg: &RunConfig, work: &Path, state: &Path) {
+    for _ in 0..DRAINS {
+        let drained = Command::new(&cfg.tools.broker)
+            .args(["memory", "drain", "--workspace"])
+            .arg(work)
+            .arg("--online")
+            .args(cfg.tools.memory_debug_log.then_some("--memory-debug-log"))
+            .env("XDG_STATE_HOME", state)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .is_ok_and(|s| s.success());
+        if !drained || spent(cfg, work, state).is_none_or(|s| s.2 == 0) {
+            break;
+        }
+    }
+}
+
+/// Copies the store's `debug.log` (one store under `state`: one workspace per round) as it is
+/// after a session; a later session's copy holds the earlier ones' lines too.
+fn keep_debug_log(state: &Path, to: &Path) {
+    let stores = state.join("ripwire-broker").join("memory");
+    let Ok(entries) = std::fs::read_dir(stores) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let log = entry.path().join("debug.log");
+        if log.is_file() {
+            let _ = std::fs::copy(log, to);
+        }
+    }
+}
+
+fn record(task: &Task, arm: Arm, turn: Turn, s: &Summary, sc: &score::Score) -> RunRecord {
+    let repeat = turn.repeat;
     let read = s.memory_read.unwrap_or_default();
     let memory = |v: u64| arm.memory().then_some(v);
+    let broker = |v: u64| (arm.server() == Some("ripwire-broker")).then_some(v);
     RunRecord {
         task: task.id.clone(),
         repo: task.repo_name(),
@@ -277,12 +358,17 @@ fn record(task: &Task, arm: Arm, repeat: u32, s: &Summary, sc: &score::Score) ->
         memory_ingestion_attempts: None,
         memory_ingestion_questions: None,
         memory_jobs_left: None,
+        finish_calls: broker(s.finish_calls),
+        finish_notes: broker(s.finish_notes),
+        position: Some(turn.position),
     }
 }
 
-/// One session in the round's place `dir`: the copy (`work`, made afresh at the task's base, in
-/// the same path for every session of a sequence) and the server's state (`state`).
-fn one(cfg: &RunConfig, task: &Task, arm: Arm, repeat: u32, dir: &Path) -> RunRecord {
+/// One session in the round's place `dir`: the copy (`work`, in the same path for every session
+/// of a sequence; made afresh at the task's base, or kept from the previous session when the
+/// task continues it) and the server's state (`state`).
+fn one(cfg: &RunConfig, task: &Task, arm: Arm, turn: Turn, dir: &Path) -> RunRecord {
+    let repeat = turn.repeat;
     let failed = |why: String| RunRecord {
         task: task.id.clone(),
         repo: task.repo_name(),
@@ -290,14 +376,24 @@ fn one(cfg: &RunConfig, task: &Task, arm: Arm, repeat: u32, dir: &Path) -> RunRe
         repeat,
         vocabulary_diverges: task.vocabulary_diverges,
         invalid: Some(why),
+        position: Some(turn.position),
         ..RunRecord::default()
     };
     let work = dir.join("work");
-    let _ = std::fs::remove_dir_all(&work);
+    // Nothing to continue from when the previous session never got its copy.
+    let continues = task.continues && work.join(".git").exists();
+    if !continues {
+        let _ = std::fs::remove_dir_all(&work);
+    }
     let id = run_id(task, arm, repeat);
     let env = environment(task, &id);
     let result = (|| {
-        checkout_base(task, &work)?;
+        let start = if continues {
+            commit_session(&work)?
+        } else {
+            checkout_base(task, &work)?;
+            task.base.clone()
+        };
         let logs = cfg.out.join("transcripts");
         let name = format!("{}__{}__{repeat}", task.id, arm.name());
         let setup_log = logs.join(format!("{name}.setup.log"));
@@ -313,7 +409,7 @@ fn one(cfg: &RunConfig, task: &Task, arm: Arm, repeat: u32, dir: &Path) -> RunRe
         // What setup left in the tree (builds, caches) is not the agent's edit, unless the agent
         // then changed it again: each such file is remembered by its content.
         let before_agent: std::collections::HashMap<String, Option<Vec<u8>>> =
-            score::modified_files(&work, &task.base)
+            score::modified_files(&work, &start)
                 .into_iter()
                 .map(|f| {
                     let state = score::state(&work, &f);
@@ -352,7 +448,7 @@ fn one(cfg: &RunConfig, task: &Task, arm: Arm, repeat: u32, dir: &Path) -> RunRe
         } else if s.valid() {
             s.invalid = arm.contamination(&s);
         }
-        let modified: Vec<String> = score::modified_files(&work, &task.base)
+        let modified: Vec<String> = score::modified_files(&work, &start)
             .into_iter()
             .filter(|f| {
                 before_agent
@@ -368,8 +464,15 @@ fn one(cfg: &RunConfig, task: &Task, arm: Arm, repeat: u32, dir: &Path) -> RunRe
             )
         });
         let sc = score::score(task, &s, &modified, correct);
-        let mut r = record(task, arm, repeat, &s, &sc);
-        // Ingestion: what the store spent during the session, less what its reads sent.
+        let mut r = record(task, arm, turn, &s, &sc);
+        if arm == Arm::BrokerMemory && turn.followed {
+            drain(cfg, &work, &state);
+        }
+        if arm.memory() && cfg.tools.memory_debug_log {
+            keep_debug_log(&state, &logs.join(format!("{name}.memory.log")));
+        }
+        // Ingestion: what the store spent during the session and its drain, less what its
+        // reads sent.
         if let Some((b, a)) = before.and_then(|b| Some((b, spent(cfg, &work, &state)?))) {
             let read = s.memory_read.unwrap_or_default();
             r.memory_ingestion_attempts = Some(a.0.saturating_sub(b.0 + read.requests));
@@ -407,6 +510,19 @@ fn rounds(tasks: &[Task]) -> Vec<Vec<&Task>> {
         }
     }
     out
+}
+
+/// The arms in the order they run for `round` and `repeat`: as given, or by a digest of the
+/// seed, the round and the repeat, so that the same seed draws the same orders again.
+fn order(cfg: &RunConfig, round: &str, repeat: u32) -> Vec<Arm> {
+    use sha2::{Digest, Sha256};
+    let mut arms = cfg.arms.clone();
+    if let Some(seed) = cfg.shuffle {
+        arms.sort_by_cached_key(|a| {
+            Sha256::digest(format!("{seed}\0{round}\0{repeat}\0{}", a.name())).to_vec()
+        });
+    }
+    arms
 }
 
 /// The first line `program --version` prints, or `unavailable`.
@@ -512,19 +628,27 @@ pub fn run(cfg: &RunConfig, log: &mut dyn FnMut(&str)) -> Result<usize, String> 
     let mut made = 0;
     for round in rounds {
         for repeat in 1..=cfg.repeats {
-            for &arm in &cfg.arms {
+            let name = round[0].sequence.as_deref().unwrap_or(&round[0].id);
+            for (position, arm) in order(cfg, name, repeat).into_iter().enumerate() {
                 if recorded(round[0], arm, repeat) {
                     continue;
                 }
                 let dir = scratch()?;
                 let mut records: Vec<RunRecord> = vec![];
-                for task in &round {
+                for (i, task) in round.iter().enumerate() {
                     log(&format!("{} · {} · {repeat}", task.id, arm.name()));
-                    let mut r = one(cfg, task, arm, repeat, &dir);
+                    let turn = Turn {
+                        repeat,
+                        position: position as u32,
+                        followed: i + 1 < round.len(),
+                    };
+                    let mut r = one(cfg, task, arm, turn, &dir);
                     if let Some(why) = &r.invalid {
                         log(&format!("  invalid: {why}"));
                     }
-                    r.history_incomplete = arm.memory() && records.iter().any(|p| !p.valid);
+                    // A history is the store's, and the tree's when the session continues it.
+                    r.history_incomplete =
+                        (arm.memory() || task.continues) && records.iter().any(|p| !p.valid);
                     records.push(r);
                 }
                 let _ = std::fs::remove_dir_all(&dir);

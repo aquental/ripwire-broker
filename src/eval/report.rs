@@ -65,6 +65,14 @@ pub struct RunRecord {
     /// the next session of the sequence, or by none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub memory_jobs_left: Option<u64>,
+    /// With a broker arm: calls to `context_before_finish` and how many carried a note.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub finish_calls: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub finish_notes: Option<u64>,
+    /// Where the arm ran among the arms of its task (or sequence) and repeat, from 0.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub position: Option<u32>,
 }
 
 impl RunRecord {
