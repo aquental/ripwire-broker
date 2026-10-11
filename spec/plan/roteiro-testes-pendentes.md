@@ -215,6 +215,7 @@ $B memory add --workspace "$W" --file ../note.json
 | Codex 0.161.0, sessões de controle (D-179) | sim | sim, 2 de 2 | **sem diferença**: corrigiu o teste em 2 de 2 com memória e 2 de 2 sem |
 | Claude Code 2.1.296, nota com o porquê (D-180) | sim | sim, 5 de 5 | **sim**: desfez a mudança em 0 de 5 com memória, 6 de 7 sem |
 | Codex 0.161.0, nota com o porquê (D-180) | sim | sim, 2 de 2 | sem diferença visível: já mantinha a mudança sem memória |
+| Os dois hosts, pedido novo de mudar o mesmo valor (D-181) | — | a leitura deixa a nota de fora em 3 de 4 (0,45); forçada nas demais | **não hesita**: muda de imediato, com e sem a nota |
 
 As sessões de controle não acharam diferença com a nota que só dizia o que mudou (D-179) e
 acharam no Claude Code com a nota que diz por quê ([D-180](../changelog.md#d-180--a-nota-diz-por-quê-e-o-claude-code-deixa-de-desfazer-a-mudança)). O que falta neste bloco: um
