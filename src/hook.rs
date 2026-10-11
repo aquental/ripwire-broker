@@ -898,7 +898,7 @@ pub async fn run(args: &HookArgs, stdin: &str) -> Option<Value> {
     let memory_started = std::time::Instant::now();
     let memory = match (args.memory, &root) {
         (true, Some(r)) => crate::memory::identity::workspace_id(r).ok().map(|id| {
-            let mut spool = crate::memory::store::Store::new(store.dir(), &id);
+            let mut spool = crate::memory::store::Store::new(store.dir(), &id).unforced_spool();
             let setup = memory_started.elapsed();
             // A log that cannot be opened is not the hook's failure: it goes on without one.
             if args.memory_debug_log {

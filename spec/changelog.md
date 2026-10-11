@@ -116,6 +116,7 @@
 | 2026-10-10 14:10 | A leitura de memória foi reproduzida e diagnosticada: ela funciona, e recusa as observações automáticas porque o texto delas não diz sobre o que a análise foi (0,20 e 0,16 contra 0,60; uma nota explícita teve 0,91). O PRD jev-mem vai à v0.4 e libera o texto enriquecido `memory-observation/v2`; a implementação é a T3.12 | [D-171](#d-171--a-leitura-recusa-as-observações-automáticas-prd-v04) |
 | 2026-10-10 17:50 | T3.12: as observações automáticas passam a dizer, só por nome, o que a análise achou (`memory-observation/v2`, `memory-policy/v2`): símbolos que o Ripwire resolveu, dependentes, testes ligados e o `kind` dos achados. O aceite manual não passou: a relevância da observação de edição foi de 0,20 para 0,48, contra a barra de 0,60 (`kept=0`). A tarefa fica aberta | [D-172](#d-172--t312-o-texto-enriquecido-das-observações-e-o-aceite-que-não-passou) |
 | 2026-10-10 20:40 | A entrega de memória destrava pela nota do agente: `context_before_finish` aceita `note` (até 500 bytes), guardada como nota `host_supplied` com `--memory`; no cenário do roteiro ela teve 0,77 e foi entregue. Cinco acréscimos estruturados ao texto das observações foram medidos e nenhum cruzou a barra. O molde da v2 fica enxuto (sem lista vazia, hash nem limitações). PRD jev-mem v0.5: §5.2 e consentimento | [D-173](#d-173--a-nota-do-agente-na-conclusão-e-o-molde-enxuto-prd-v05) |
+| 2026-10-10 22:30 | O hook não força mais o disco: o spool da memória, o estado da sessão e a status line são gravados por temporário e rename, sem `sync_all`. O acréscimo do `--memory` cai de p95 9,4–9,9 ms para 1,9–2,0 ms, e todo hook fica cerca de 7 ms mais curto. Medido o hook inteiro em três repositórios: o custo que sobra é a consulta ao Ripwire, que cresce com o repositório | [D-174](#d-174--o-hook-não-força-o-disco) |
 | 2026-10-06 15:52 | A barra mostra o servidor vivo do workspace: `[jev:N]` (requisições ao Jev), com `--memory` `[mem: retr N, stor M]` (leituras e gravações da memória), nos últimos 5 s, e `(online)` no fim; um arquivo por processo `serve`, renovado a cada 10 s e ignorado depois de 30 s | [D-154](#d-154--o-servidor-na-barra-jev-memória-e-online) |
 | 2026-10-06 15:15 | Repositório migrado da organização `CeciApp` para a conta `aquental`: remoto `origin` atualizado, URLs do diagrama de arquitetura trocadas, histórico (D-054, D-055) mantido | [D-153](#d-153--migração-do-repositório-para-aquental) |
 | 2026-10-05 00:30 | Achados baixos da memória, segunda parte, e do eval, em TDD: lease só sai livre e `finish` velho não assenta nada, somas da quota saturam, `memory retry` alcança jobs adiados, ingest perto do teto toma o que cabe, pânico do worker dito (grupo 3); guarda de shell que vê opções, palavras-chave, `-lc`, `xargs` e `find -exec`, `{repo}`/`{fix}` como uma palavra, `spent` só em braço com memória, ids de tarefa recusados, CLI do `ripwire-eval`, `history_incomplete` fora das médias, sessão cortada pela API inválida e prompt longo que segurava o timeout (grupo 3) | [D-151](#d-151--achados-baixos-da-memória-segunda-parte-e-do-eval) |
@@ -8037,3 +8038,101 @@ pela tool, e `tests/mcp_surface.rs::a_note_given_over_mcp_is_spooled_as_the_host
 Portões: 847 (5 ignorados) e 885 (8 ignorados), fmt e os dois clippy limpos. SLO do `hook --memory`, 5 rodadas de
 200 hooks em release: p50 7,9 a 8,2 ms, p95 9,4 a 9,9 ms, p99 9,9 a 11,5 ms, máximo até 15,2 ms; dentro
 de 10 e 25 ms, com a mesma folga curta no p95 de antes.
+
+## D-174 — O hook não força o disco
+
+**Decisão do mantenedor**, depois de medir para onde vai o tempo do hook.
+
+**O que foi medido antes.** Cronômetros temporários em cada passo da gravação de uma observação
+(400 hooks, release, macOS/APFS):
+
+| Passo | p50 | p95 | Parte |
+|---|---|---|---|
+| Gravação inteira | 7,89 ms | 9,90 ms | 100% |
+| `sync_all` do arquivo da observação | 3,58 ms | 4,19 ms | 45% |
+| `sync_all` do diretório do spool | 2,78 ms | 3,77 ms | 35% |
+| Checagens e contagem do spool | 0,54 ms | 1,00 ms | 7% |
+| Admissão (ler, hash, varredura, renderizar) | 0,50 ms | 0,53 ms | 6% |
+| Temporário, escrita e rename | 0,18 ms | 0,25 ms | 2% |
+| Abrir o store | 0,07 ms | 0,09 ms | 1% |
+
+Fora da memória, todo hook pagava mais dois `sync_all`: o estado da sessão e a projeção da status
+line, cerca de 8 ms juntos, inclusive nos hooks que só seguram a edição e saem.
+
+**O que mudou.** O hook grava por arquivo temporário e rename, sem forçar o disco, em três
+lugares: o spool da memória (`Store::unforced_spool`), o estado da sessão (`StateStore::save`) e a
+status line (`statusline_state::publish`). O rename continua garantindo que um leitor nunca vê
+meio arquivo. O servidor, os comandos `memory` e tudo mais que o store escreve (snapshot,
+geração, revogação, cota) continuam forçando.
+
+**O que se arrisca.** Uma queda de energia ou travamento do sistema antes de o sistema operacional
+gravar o arquivo. Fim do processo, crash do agente e fechamento do terminal não perdem nada.
+
+- Spool: a observação se perde, ou fica um arquivo vazio com o nome certo; a ingestão o rejeita,
+  remove e segue. A próxima análise do mesmo arquivo recria a observação. Depois da ingestão a
+  observação está no snapshot, que é forçado.
+- Estado da sessão: um arquivo vazio é uma sessão nova; custa uma injeção repetida.
+- Status line: é uma projeção, reescrita pelo hook seguinte.
+- A nota do agente (D-173) entra pelo servidor, que continua forçando.
+
+**PRD jev-mem.** §7 ganha a exceção do spool escrito por hook; §8.2 diz o que "confirmada" quer
+dizer em cada processo.
+
+**Resultado no `--memory` (SLO do PRD §8.2, 5 rodadas de 200 hooks, pelo cronômetro do hook):**
+
+| | p50 | p95 | p99 |
+|---|---|---|---|
+| Antes (D-173) | 7,9–8,2 ms | 9,4–9,9 ms | 9,9–11,5 ms |
+| Depois | 1,4–1,5 ms | 1,9–2,0 ms | 2,0–3,2 ms |
+
+A folga no p95 passa de décimos de milissegundo para 8 ms.
+
+**Resultado no hook inteiro, em três repositórios.** Binário do `master` contra o deste branch,
+com e sem `--memory`, intercalados; 3 rodadas por repositório; tempo de parede do processo do
+hook de edição, p50 em ms (faixa das 3 rodadas). "Analisado" é o hook que consulta o Ripwire;
+"segurado" é o que chega dentro de 1 s da análise anterior e só guarda a edição.
+
+| Repositório | Arquivos | Hook | Antes | Depois |
+|---|---|---|---|---|
+| exemplo (Python) | 2 | segurado | 27,4–28,7 | 20,8–21,3 |
+| exemplo (Python) | 2 | analisado | 160–171 | 150–162 |
+| `CeciApp/ceci_app` (Elixir) | 2.573 | segurado | 34,7–36,7 | 29,1–29,7 |
+| `CeciApp/ceci_app` (Elixir) | 2.573 | analisado | 476–484 | 468–471 |
+| `astral-sh/ruff` (Rust, Python) | 11.238 | analisado | 963–1.067 | 998–1.081 |
+
+O hook segurado fica cerca de 7 ms mais curto nos dois repositórios em que foi medido (25% e
+18%). No hook analisado o ganho some no ruído conforme o repositório cresce: no `ruff` a variação
+entre rodadas é maior do que ele. No `ruff` quase não há hook segurado para medir: a janela de 1 s
+é contada do início do hook e a análise leva mais do que isso, então a edição seguinte já é
+analisada de novo.
+
+**O que sobra é a consulta ao Ripwire.** A mesma análise repetida dentro de um único `serve`
+(Ripwire já no ar), p50 das chamadas depois da primeira, contra o hook analisado de hoje:
+
+| Repositório | Hook analisado | Servidor vivo | Diferença |
+|---|---|---|---|
+| exemplo | cerca de 160 ms | 84–85 ms | 75 ms (47%) |
+| `ceci_app` | cerca de 470 ms | 384 ms | 90 ms (19%) |
+| `ruff` | cerca de 1.030 ms | 889–942 ms | 100 ms (10%) |
+
+Um servidor vivo atendendo os hooks pouparia de 75 a 100 ms por hook, o custo de subir o Ripwire e
+preparar a sessão, em qualquer tamanho. A consulta em si não fica mais barata por o Ripwire estar
+no ar, e é ela que cresce: a previsão de "metade do tempo", feita só com o repositório de exemplo,
+não vale para repositórios reais.
+
+**Limites da medição.** macOS/APFS, onde `sync_all` é `F_FULLFSYNC`; no Linux o ganho dos syncs
+deve ser menor. Um arquivo editado por repositório, sempre o mesmo. Os tempos absolutos mudam com
+o estado da máquina (o repositório de exemplo deu 22 ms num dia e 28 ms noutro para o hook
+segurado); as comparações valem dentro de cada rodada, onde os binários se alternam.
+
+**Onde.** `src/state.rs` (`write_private_unforced`, `force`, `forced_syncs`),
+`src/memory/store.rs` (`forced_spool`, `unforced_spool`), `src/hook.rs`,
+`src/statusline_state.rs`, `src/memory/publish.rs` (o que "confirmada" quer dizer).
+
+**Verificação.** Vermelho: `tests/hook_durability.rs`, `cannot find function forced_syncs in module
+state`. O teste roda o hook real com `--memory` e conta os syncs forçados do processo: zero no
+hook, dois na mesma gravação feita fora dele; depois esvazia os arquivos, como uma queda deixaria,
+e confere que a ingestão rejeita e limpa e que a sessão recomeça. É um teste só no arquivo, porque
+o contador é do processo. Mutação: 6 de 6 mortas (spool do hook forçado, estado forçado, status
+line forçada, store que nunca força, diretório do spool sem forçar, a variante sem forçar
+forçando). Portões: 848 (5 ignorados) e 886 (8 ignorados), fmt e os dois clippy limpos.

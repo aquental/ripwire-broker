@@ -71,7 +71,8 @@ pub struct MemoryStatus {
 /// Counts only, for the status resource.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
 pub struct Counts {
-    /// Durable in the spool before the answer left.
+    /// In the spool before the answer left: forced to disk by the server, written and renamed
+    /// by a hook (D-174).
     pub confirmed: u64,
     /// Still being written when the answer left, or not started because too many were.
     pub unconfirmed: u64,
