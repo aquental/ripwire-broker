@@ -36,7 +36,7 @@ jobs:
           persist-credentials: false
       # cargo-deny is deliberately not version-pinned: the whole point of this job is to see
       # today's advisory database with today's tooling.
-      - uses: taiki-e/install-action@861a07ce7084f55488e375df125cdc99bba60eb7 # v2.87.23
+      - uses: taiki-e/install-action@ab6895351a88b908e96a4697860d4ffea5e57dbe # v2.87.27
         with:
           tool: cargo-deny
       # --all-features so the `online` half of the graph is covered too. deny.toml sets
