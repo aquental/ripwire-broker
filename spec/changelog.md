@@ -8858,3 +8858,27 @@ entregues, 3 recusadas, 1 obsoleta. Nenhum gate pode ser lido com esse n.
 **Para refazer.** Cota do Codex disponível; base sem o índice do graft e sem o bloco do
 `AGENTS.md`; skills `ripwire-*` do usuário fora do alcance do Codex; guarda que olha o comando
 executado, não o texto inteiro.
+
+## D-188 — O CI instala o ripwire, na última release
+
+**O problema.** O `rust.yml` não instalava o ripwire. Os testes que precisam do binário real
+começam com `require_ripwire!()`, que retorna cedo sem ele: no CI, todos passavam sem testar nada.
+A integração com o ripwire só era testada na máquina de quem rodasse a suíte localmente.
+
+**O que muda.** Os jobs `default` e `online` ganham um passo que baixa a última release de
+`redhat-et/ripwire` (`gh release download`, `linux-x64`), confere o `sha256` publicado na própria
+release e põe o binário no `PATH`. O `ripwire --version` fica no log de cada execução.
+
+**Última versão, não um pin, por escolha do usuário.** É a exceção à regra do arquivo, onde as
+actions são fixadas por SHA e a CLI do Claude Code por versão. Esses testes existem para perceber
+quando um ripwire novo quebra a integração. Um pin só perceberia isso no dia em que alguém
+subisse o pin. O custo é que um CI vermelho pode vir de uma release nova do ripwire, e não da PR.
+O `ripwire --version` no log de cada execução separa os dois casos.
+
+**Sem o `install.sh`.** O script oficial também baixa a última release e exige o checksum. Mas ele
+roda código tirado do `main` de outro repositório, que pode mudar a qualquer momento, e ainda
+instala skills e hooks. O passo próprio baixa e verifica o mesmo binário sem executar nada
+remoto.
+
+**Risco conhecido.** O `a_hung_upstream_times_out_and_is_restarted` (issue #120) passa a rodar no
+CI contra o ripwire real. Ele já falhava localmente, sob carga.
