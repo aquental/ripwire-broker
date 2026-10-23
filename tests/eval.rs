@@ -1974,6 +1974,66 @@ fn edits_the_agent_committed_still_count_and_any_file_name_matches() {
     );
 }
 
+/// #122: a killed process stays a zombie until someone reaps it, and `kill -0` still finds a
+/// zombie. Whether it is reaped in time is up to whoever adopted it, not the code under test.
+#[test]
+fn a_killed_process_not_yet_reaped_counts_as_gone() {
+    let mut child = KillOnDrop::spawn("sleep", &["30"]);
+    let pid = child.0.id().to_string();
+    child.0.kill().unwrap(); // SIGKILL, and no wait() yet: a zombie, reaped on drop
+    assert!(
+        common::wait_gone(&pid, std::time::Duration::from_secs(1)),
+        "a killed process counts as gone even before it is reaped"
+    );
+}
+
+#[test]
+fn a_live_process_is_not_gone() {
+    let child = KillOnDrop::spawn("sleep", &["30"]);
+    assert!(
+        !common::wait_gone(
+            &child.0.id().to_string(),
+            std::time::Duration::from_millis(200)
+        ),
+        "a running process is still there"
+    );
+}
+
+/// `ps -p ''` prints nothing, which reads as gone: an empty pidfile would let the check above
+/// pass with nothing killed. A pid that is not a number is a bug in the test, not an answer.
+#[test]
+#[should_panic(expected = "not a pid")]
+fn a_pid_that_is_not_a_number_is_refused() {
+    common::wait_gone("", std::time::Duration::from_millis(100));
+}
+
+/// A helper process, killed and reaped when dropped, so an assertion that fails cannot leave it
+/// behind. It gets no stdio of the test's: holding the test's stdout open is what nextest reports
+/// as a `LEAK` (#122), and that must not depend on Drop running.
+struct KillOnDrop(std::process::Child);
+
+impl KillOnDrop {
+    fn spawn(program: &str, args: &[&str]) -> Self {
+        use std::process::Stdio;
+        Self(
+            Command::new(program)
+                .args(args)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .unwrap(),
+        )
+    }
+}
+
+impl Drop for KillOnDrop {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
 #[test]
 fn a_timeout_ends_the_agent_and_the_check_with_everything_they_started() {
     let repo = common::sample_repo();
@@ -1998,7 +2058,7 @@ sleep 30
     )
     .unwrap();
     // A process outside those groups, which no timeout may touch.
-    let mut witness = Command::new("sleep").arg("60").spawn().unwrap();
+    let mut witness = KillOnDrop::spawn("sleep", &["60"]);
     let started = std::time::Instant::now();
     let out = Command::new(env!("CARGO_BIN_EXE_ripwire-eval"))
         .args([
@@ -2025,18 +2085,14 @@ sleep 30
         started.elapsed()
     );
     let pid = std::fs::read_to_string(&pidfile).unwrap();
-    let alive = Command::new("kill")
-        .args(["-0", pid.trim()])
-        .status()
-        .unwrap()
-        .success();
-    assert!(!alive, "the check's process went with it");
     assert!(
-        witness.try_wait().unwrap().is_none(),
+        common::wait_gone(pid.trim(), std::time::Duration::from_secs(2)),
+        "the check's process went with it"
+    );
+    assert!(
+        witness.0.try_wait().unwrap().is_none(),
         "nothing outside the timed-out groups was killed"
     );
-    witness.kill().unwrap();
-    witness.wait().unwrap();
 }
 
 #[test]

@@ -58,14 +58,44 @@ fn git(root: &Path, args: &[&str]) {
     assert!(ok, "git {args:?} failed");
 }
 
+/// Whether the process `pid` is gone within `within`, polling. A zombie counts as gone: it is
+/// dead, and only waits for whoever adopted it to reap it, which `kill -0` cannot tell apart
+/// from a live process (#122). `ps` prints nothing for a pid that no longer exists, and also for
+/// one that is not a number, so that is refused rather than read as gone.
+pub fn wait_gone(pid: &str, within: std::time::Duration) -> bool {
+    assert!(
+        !pid.is_empty() && pid.bytes().all(|b| b.is_ascii_digit()),
+        "not a pid: {pid:?}"
+    );
+    let deadline = std::time::Instant::now() + within;
+    loop {
+        let out = Command::new("ps")
+            .args(["-o", "stat=", "-p", pid])
+            .stderr(std::process::Stdio::null())
+            .output()
+            .unwrap();
+        let stat = String::from_utf8_lossy(&out.stdout);
+        let stat = stat.trim();
+        // Z: a zombie; X: dead (Linux, rarely seen).
+        if stat.is_empty() || stat.starts_with('Z') || stat.starts_with('X') {
+            return true;
+        }
+        if std::time::Instant::now() >= deadline {
+            return false;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+}
+
 /// An executable stand-in for ripwire: the first launch runs `first_launch`
-/// (a shell snippet), every later launch execs the real ripwire.
-pub fn flaky_ripwire(dir: &Path, first_launch: &str) -> std::path::PathBuf {
+/// (a shell snippet), every later launch execs `then` (the real `ripwire`, or a stand-in).
+pub fn flaky_ripwire(dir: &Path, first_launch: &str, then: &Path) -> std::path::PathBuf {
     let marker = dir.join("launched-once");
     let script = dir.join("flaky-ripwire");
     let body = format!(
-        "#!/bin/sh\nif [ ! -f '{m}' ]; then touch '{m}'; {first_launch}; fi\nexec ripwire \"$@\"\n",
-        m = marker.display()
+        "#!/bin/sh\nif [ ! -f '{m}' ]; then touch '{m}'; {first_launch}; fi\nexec '{then}' \"$@\"\n",
+        m = marker.display(),
+        then = then.display()
     );
     write_executable(&script, body);
     script
