@@ -15,9 +15,20 @@ agent ⇄ stdio ⇄ ripwire-broker ⇄ stdio ⇄ ripwire <workspace> --mcp
 ## Requirements
 
 - Rust 1.98.1 (pinned in `rust-toolchain.toml`)
-- `ripwire` ≥ 0.6.4 on `PATH` (or pass `--ripwire BIN`)
+- `ripwire` ≥ 0.6.4 on `PATH` (or pass `--ripwire BIN`); see [Installing ripwire](#installing-ripwire)
 - Online mode only: a build with `--features online` and a TypeSafe API key, or a Cloudflare
   Workers AI token and account id with `--jev-provider cloudflare`
+
+## Installing ripwire
+
+The install script puts `ripwire` in `~/.local/bin`, which must be on `PATH`:
+
+```sh
+RIPWIRE_REPO=redhat-et/ripwire bash -c "$(curl -fsSL https://raw.githubusercontent.com/redhat-et/ripwire/main/scripts/install.sh)"
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Add the `export` line to your shell profile to keep it across sessions.
 
 ## Build and run
 
