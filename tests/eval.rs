@@ -1974,6 +1974,44 @@ fn edits_the_agent_committed_still_count_and_any_file_name_matches() {
     );
 }
 
+/// #122: a killed process stays a zombie until someone reaps it, and `kill -0` still finds a
+/// zombie. Whether it is reaped in time is up to whoever adopted it, not the code under test.
+#[test]
+fn a_killed_process_not_yet_reaped_counts_as_gone() {
+    let mut child = Command::new("sleep").arg("30").spawn().unwrap();
+    let pid = child.id().to_string();
+    child.kill().unwrap(); // SIGKILL, and no wait() yet: a zombie
+    let gone = common::wait_gone(&pid, std::time::Duration::from_secs(1));
+    child.wait().unwrap();
+    assert!(
+        gone,
+        "a killed process counts as gone even before it is reaped"
+    );
+}
+
+#[test]
+fn a_live_process_is_not_gone() {
+    let mut child = Command::new("sleep").arg("30").spawn().unwrap();
+    let gone = common::wait_gone(
+        &child.id().to_string(),
+        std::time::Duration::from_millis(200),
+    );
+    child.kill().unwrap();
+    child.wait().unwrap();
+    assert!(!gone, "a running process is still there");
+}
+
+/// Kills the process when dropped, so an assertion that fails cannot leave it holding the
+/// test's stdout open (the `LEAK` nextest reported in #122).
+struct KillOnDrop(std::process::Child);
+
+impl Drop for KillOnDrop {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
 #[test]
 fn a_timeout_ends_the_agent_and_the_check_with_everything_they_started() {
     let repo = common::sample_repo();
@@ -1998,7 +2036,7 @@ sleep 30
     )
     .unwrap();
     // A process outside those groups, which no timeout may touch.
-    let mut witness = Command::new("sleep").arg("60").spawn().unwrap();
+    let mut witness = KillOnDrop(Command::new("sleep").arg("60").spawn().unwrap());
     let started = std::time::Instant::now();
     let out = Command::new(env!("CARGO_BIN_EXE_ripwire-eval"))
         .args([
@@ -2025,18 +2063,14 @@ sleep 30
         started.elapsed()
     );
     let pid = std::fs::read_to_string(&pidfile).unwrap();
-    let alive = Command::new("kill")
-        .args(["-0", pid.trim()])
-        .status()
-        .unwrap()
-        .success();
-    assert!(!alive, "the check's process went with it");
     assert!(
-        witness.try_wait().unwrap().is_none(),
+        common::wait_gone(pid.trim(), std::time::Duration::from_secs(2)),
+        "the check's process went with it"
+    );
+    assert!(
+        witness.0.try_wait().unwrap().is_none(),
         "nothing outside the timed-out groups was killed"
     );
-    witness.kill().unwrap();
-    witness.wait().unwrap();
 }
 
 #[test]

@@ -3,6 +3,7 @@ mod common;
 
 use ripwire_broker::upstream::{RipwireUpstream, Upstream, UpstreamConfig, UpstreamError};
 use serde_json::json;
+use std::path::Path;
 
 macro_rules! require_ripwire {
     () => {
@@ -71,13 +72,16 @@ async fn a_bad_argument_is_a_refusal_not_an_outage() {
     assert!(matches!(err, UpstreamError::Refused(_)), "got {err:?}");
 }
 
+/// The restarted process is a stand-in that answers at once, not the real ripwire: the 500 ms
+/// that makes the hang detectable quickly would otherwise also bound the real binary's first
+/// call, which a loaded machine overruns (#120). This test is about the restart, not ripwire.
 #[tokio::test]
 async fn a_hung_upstream_times_out_and_is_restarted() {
-    require_ripwire!();
     let repo = common::sample_repo();
     let bin = tempfile::tempdir().unwrap();
+    let answers_at_once = common::slow_ripwire(bin.path());
     let mut config = UpstreamConfig::new(repo.path());
-    config.binary = common::flaky_ripwire(bin.path(), "exec sleep 600");
+    config.binary = common::flaky_ripwire(bin.path(), "exec sleep 600", &answers_at_once);
     config.timeout = std::time::Duration::from_millis(500);
     let up = RipwireUpstream::spawn(config).await.unwrap();
 
@@ -98,7 +102,7 @@ async fn a_crashed_upstream_gets_one_restart_within_the_call() {
     let repo = common::sample_repo();
     let bin = tempfile::tempdir().unwrap();
     let mut config = UpstreamConfig::new(repo.path());
-    config.binary = common::flaky_ripwire(bin.path(), "exit 3");
+    config.binary = common::flaky_ripwire(bin.path(), "exit 3", Path::new("ripwire"));
     config.timeout = std::time::Duration::from_secs(5);
     let up = RipwireUpstream::spawn(config).await.unwrap();
 
