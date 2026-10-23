@@ -8882,3 +8882,92 @@ remoto.
 
 **Risco conhecido.** O `a_hung_upstream_times_out_and_is_restarted` (issue #120) passa a rodar no
 CI contra o ripwire real. Ele já falhava localmente, sob carga.
+
+## D-189 — Hook frio contra MCP quente, e o ripwire 0.6.8 contra o 0.6.5
+
+Duas perguntas do usuário: o ripwire 0.6.8 é mais rápido? E, se o hook não pode usar o ripwire
+quente do servidor MCP, valeria um segundo ripwire quente só para os hooks? Medido em
+2026-10-22, num Apple M3 com macOS 27.0.1, build release do broker em `639c479`.
+
+### Como foi medido
+
+- **Workspace:** um clone novo deste repositório em `639c479` (202 arquivos rastreados, 110 `.rs`),
+  com uma linha acrescentada ao `src/budget.rs`, para que os eventos de edição e de conclusão
+  tenham uma mudança real a analisar. É o mesmo workspace para as duas versões. Os números não se
+  comparam com os do D-105, que usou outro workspace, menor.
+- **Binários:** o 0.6.5 baixado da release, com o `sha256` conferido, numa pasta separada, e o 0.6.8
+  instalado em `~/.local/bin`.
+- **Hook (caminho frio):** os três eventos de ponta a ponta, a partir das fixtures de
+  `tests/fixtures/hooks`, com `--edit-interval-ms 0` e um `--state-dir` próprio. Cada rodada usa
+  uma sessão nova, para que nenhum evento caia num retorno antecipado de sessão. Antes da
+  medição, uma execução de cada evento confirmou que todos fazem trabalho real: o
+  `user-prompt-submit` devolve 2,9 KB de contexto, o `post-tool-use` 3,8 KB, e o `stop` roda o
+  gate.
+- **MCP (caminho quente):** um único `ripwire-broker` servindo as três tools equivalentes
+  (`context_for_task`, `context_after_edit`, `context_before_finish`), com um ripwire filho que
+  fica vivo. Para que o quente não pareça melhor do que é, cada rodada muda o texto da tarefa e
+  acrescenta uma linha ao `src/budget.rs`. Assim o ripwire não pode responder a partir de um
+  resultado guardado da rodada anterior. A rodada 0 é a partida fria e fica separada.
+- **Amostra:** mediana de 15 rodadas, depois de uma de aquecimento. As versões foram medidas duas
+  vezes, intercaladas (0.6.5, 0.6.8, 0.6.5, 0.6.8), e as duas passadas bateram em ±1%. A carga
+  média da máquina ficou em torno de 3 durante a medição.
+
+Os scripts ficaram fora do repositório: um `bash` para os hooks e um cliente MCP mínimo em Python
+para o servidor.
+
+### O 0.6.8 não é mais rápido
+
+| | 0.6.5 | 0.6.8 | diferença |
+| --- | --- | --- | --- |
+| hook `user-prompt-submit` | 130 ms | 127 ms | −2% |
+| hook `post-tool-use` | 234 ms | 236 ms | ≈ |
+| hook `stop` | 911 ms | 1014 ms | **+11%** |
+| MCP quente `context_for_task` | 76 ms | 80 ms | +7% |
+| MCP quente `context_after_edit` | 98 ms | 105 ms | +7% |
+| MCP quente `context_before_finish` | 753 ms | 870 ms | **+15%** |
+
+O 0.6.8 é mais lento em tudo que trabalha de verdade, e a diferença é maior no gate de conclusão.
+Ainda não foi reportado ao ripwire.
+
+### Começar frio quase não custa
+
+O custo de começar frio é a diferença entre a primeira chamada do servidor MCP, que inclui abrir o
+ripwire, e as seguintes, no 0.6.8:
+
+| | 1ª chamada | quente (p50) | custo de começar frio |
+| --- | --- | --- | --- |
+| `context_for_task` | 97–101 ms | 80 ms | ~18 ms |
+| `context_after_edit` | 113–114 ms | 105 ms | ~8 ms |
+| `context_before_finish` | 862–870 ms | 868–873 ms | ~0 ms |
+
+Subir o processo do broker custa outros ~8 ms (o `initialize`). O motivo de começar frio custar
+tão pouco é o cache do ripwire: por padrão ele mantém um cache incremental por raiz no TMPDIR
+(`--no-cache` o desliga, "forces a cold parse"), então um processo novo só reprocessa os arquivos
+que mudaram.
+
+### O que isso decide sobre um segundo ripwire quente para os hooks
+
+O hook não usa o ripwire quente porque não há canal até ele. O Claude Code abre o servidor MCP
+como filho e fala com ele por stdio, e o servidor fala com o ripwire pelo mesmo caminho. Cada
+evento de hook é outro processo, aberto e encerrado pelo Claude Code, sem socket nem outro meio de
+chegar ao ripwire do servidor.
+
+Um ripwire quente só para os hooks é a opção D do D-101, um daemon próprio. Ele economizaria só
+o custo de começar frio mais a subida do processo: **de 10 a 25 ms por evento**, ou 2% a 8% nos
+hooks baratos e quase nada no `stop`. A medição **confirma a recusa do D-105**: socket,
+autenticação, ciclo de vida e supervisão de memória (D-050) por um ganho desse tamanho não
+compensam.
+
+### O que ficou sem explicação
+
+Os hooks custam bem mais que as tools equivalentes no servidor quente: 47 ms a mais no
+`user-prompt-submit`, 131 ms no `post-tool-use` e 144 ms no `stop`, no 0.6.8. Só uns 20 ms disso
+são começar frio. O resto é trabalho que o caminho do hook faz e o da tool não faz, ou faz de
+outra forma, e **não foi decomposto**. Se valer otimizar alguma coisa nos hooks, o lugar é esse e
+o próprio gate de conclusão (~870 ms), não um processo quente.
+
+Uma observação sobre o D-019: lá, o `explore` aquecido aparece com 2,8 ms. Aquela medição repetia
+a mesma pergunta, e o número pode refletir um resultado guardado, e não o custo de responder com
+o ripwire quente. Hoje, com perguntas e edições diferentes a cada rodada, o `context_for_task`
+quente custou 76 a 80 ms neste workspace. Não verifiquei qual das duas explicações vale para o
+D-019.
