@@ -60,8 +60,13 @@ fn git(root: &Path, args: &[&str]) {
 
 /// Whether the process `pid` is gone within `within`, polling. A zombie counts as gone: it is
 /// dead, and only waits for whoever adopted it to reap it, which `kill -0` cannot tell apart
-/// from a live process (#122). `ps` prints nothing for a pid that no longer exists.
+/// from a live process (#122). `ps` prints nothing for a pid that no longer exists, and also for
+/// one that is not a number, so that is refused rather than read as gone.
 pub fn wait_gone(pid: &str, within: std::time::Duration) -> bool {
+    assert!(
+        !pid.is_empty() && pid.bytes().all(|b| b.is_ascii_digit()),
+        "not a pid: {pid:?}"
+    );
     let deadline = std::time::Instant::now() + within;
     loop {
         let out = Command::new("ps")
@@ -71,7 +76,8 @@ pub fn wait_gone(pid: &str, within: std::time::Duration) -> bool {
             .unwrap();
         let stat = String::from_utf8_lossy(&out.stdout);
         let stat = stat.trim();
-        if stat.is_empty() || stat.starts_with('Z') {
+        // Z: a zombie; X: dead (Linux, rarely seen).
+        if stat.is_empty() || stat.starts_with('Z') || stat.starts_with('X') {
             return true;
         }
         if std::time::Instant::now() >= deadline {
