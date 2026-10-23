@@ -40,6 +40,22 @@ jobs:
       - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
         with:
           tool: nextest
+      # The tests that need the real binary return early without it (`require_ripwire!`) and
+      # pass having tested nothing. Deliberately the latest release, not a pin, unlike the rest of
+      # this file: these runs exist to catch a new ripwire breaking the integration (D-188). The
+      # binary is checked against the release's own checksum; no remote script runs.
+      - name: ripwire (latest release)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd "$RUNNER_TEMP"
+          gh release download --repo redhat-et/ripwire \
+            --pattern 'ripwire-*-linux-x64.tar.gz' --pattern 'ripwire-*-linux-x64.tar.gz.sha256'
+          sha256sum -c ripwire-*-linux-x64.tar.gz.sha256
+          tar -xzf ripwire-*-linux-x64.tar.gz
+          install -D ripwire-*-linux-x64/ripwire "$HOME/.local/bin/ripwire"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/ripwire" --version
       # Every cargo command takes --locked: Cargo.lock is committed, and without the flag CI
       # may resolve versions that were never tested locally.
       - name: Formatting
@@ -97,6 +113,19 @@ jobs:
       - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
         with:
           tool: nextest
+      # Same as in `default` (D-188).
+      - name: ripwire (latest release)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd "$RUNNER_TEMP"
+          gh release download --repo redhat-et/ripwire \
+            --pattern 'ripwire-*-linux-x64.tar.gz' --pattern 'ripwire-*-linux-x64.tar.gz.sha256'
+          sha256sum -c ripwire-*-linux-x64.tar.gz.sha256
+          tar -xzf ripwire-*-linux-x64.tar.gz
+          install -D ripwire-*-linux-x64/ripwire "$HOME/.local/bin/ripwire"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/ripwire" --version
       - name: Clippy
         run: cargo clippy --all-targets --locked --features online -- -D warnings
       # The #[ignore] tests stay ignored: nextest does not run them without --run-ignored,
