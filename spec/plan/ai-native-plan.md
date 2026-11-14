@@ -3,7 +3,7 @@
 Data: **2026-11-14**. Base: `master`, HEAD `d9aa86e`.
 Origem: [`docs/AINE-REPORT.md`](../../docs/AINE-REPORT.md) (26 aprovados, 20 reprovados, 0 não
 aplicáveis).
-Status: **em execução** (etapa 6 feita, D-194; etapas 1, 2 e 4, D-195; etapa 3 sem a parte do mantenedor, D-196; etapa 5 sem a parte do mantenedor, D-197; etapa 7, D-198). Revisado pelo Codex em 2026-11-14: 14 achados, todos
+Status: **em execução** (etapa 6 feita, D-194; etapas 1, 2 e 4, D-195; etapa 3 sem a parte do mantenedor, D-196; etapa 5 sem a parte do mantenedor, D-197; etapa 7 sem a aceitação, que pede uma PR aberta, D-198). Revisado pelo Codex em 2026-11-14: 14 achados, todos
 conferidos no código e incorporados (ver [Revisão adversarial](#revisão-adversarial)).
 Decisão: [D-189](../changelog.md#d-189--plano-de-prontidão-para-agentes-revisado-pelo-codex).
 Conferido contra a árvore antes da execução em 2026-11-14

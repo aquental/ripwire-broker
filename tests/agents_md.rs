@@ -594,50 +594,100 @@ fn a_plan_step_not_reported_done_has_no_checked_box() {
     }
 }
 
+/// A Markdown text as GitHub renders it: without `<!-- … -->` comments.
+fn visible(doc: &str) -> String {
+    let mut out = String::new();
+    let mut rest = doc;
+    while let Some(start) = rest.find("<!--") {
+        out.push_str(&rest[..start]);
+        rest = rest[start..]
+            .split_once("-->")
+            .map_or("", |(_, after)| after);
+    }
+    out.push_str(rest);
+    out
+}
+
+/// The `- [ ]` items of a text, each with its indented continuation lines, whitespace collapsed.
+fn checkboxes(doc: &str) -> Vec<String> {
+    let mut items: Vec<String> = Vec::new();
+    let mut open = false;
+    for line in doc.lines() {
+        if let Some(text) = line.trim_start().strip_prefix("- [ ] ") {
+            items.push(text.to_string());
+            open = true;
+        } else if open && line.starts_with(char::is_whitespace) && !line.trim().is_empty() {
+            let last = items.last_mut().expect("an open item");
+            last.push(' ');
+            last.push_str(line.trim());
+        } else {
+            open = false;
+        }
+    }
+    items
+        .into_iter()
+        .map(|i| i.split_whitespace().collect::<Vec<_>>().join(" "))
+        .collect()
+}
+
 #[test]
 fn a_new_pr_opens_with_the_conventions_as_a_checklist() {
     // ai-native plan, step 7: the checklist comes from handoff.md §"Convenções". Each item is a
-    // checkbox a reviewer can see unticked.
+    // checkbox a reviewer can see unticked, so only what GitHub renders counts.
     let template = read(".github/pull_request_template.md");
-    let items: Vec<String> = template
-        .lines()
-        .filter_map(|l| l.trim_start().strip_prefix("- [ ] "))
-        .map(|l| l.split_whitespace().collect::<Vec<_>>().join(" "))
-        .collect();
-    let item = |words: &[&str]| items.iter().any(|i| words.iter().all(|w| i.contains(w)));
-    for (what, words) in [
-        ("a red test first", &["red test", "tests/"][..]),
+    let shown = visible(&template);
+    let items = checkboxes(&shown);
+    assert_eq!(items.len(), 6, "one box per convention: {items:#?}");
+    // Each convention in its own box, with the words that carry the obligation.
+    let conventions: [(&str, &[&str]); 6] = [
+        ("a red test first", &["red test", "first", "tests/"]),
         ("a decision entry", &["D-NNN", "spec/changelog.md"]),
         (
-            "no new crate in the default build",
-            &["crate", "default", "CA-10"],
+            "no network crate in the default build",
+            &["No network crate", "CA-10"],
         ),
-        ("the one command", &["scripts/check.sh all"]),
-        ("synthetic fixtures", &["tests/fixtures/", "synthetic"]),
+        (
+            "the one command, green",
+            &["`scripts/check.sh all`", "green"],
+        ),
+        (
+            "synthetic fixtures",
+            &["tests/fixtures/", "synthetic", "no credential"],
+        ),
         (
             "what plugin users run",
-            &["integrations/claude-code/", ".claude-plugin/"],
+            &[
+                "change what plugin users run",
+                "integrations/claude-code/",
+                ".claude-plugin/",
+            ],
         ),
-    ] {
+    ];
+    let mut matched = BTreeSet::new();
+    for (what, words) in conventions {
+        let at = items
+            .iter()
+            .position(|i| words.iter().all(|w| i.contains(w)))
+            .unwrap_or_else(|| panic!("no box for {what} ({words:?}): {items:#?}"));
         assert!(
-            item(words),
-            "no checklist item for {what} ({words:?}): {items:#?}"
+            matched.insert(at),
+            "{what} shares a box with another convention"
         );
     }
-    // What was verified and how: free text, not a box to tick.
+    // What was verified and how: free text the reader sees, not a box to tick.
+    let verified = section(&shown, "Verified");
     assert!(
-        template
-            .lines()
-            .any(|l| l.starts_with("## ") && l.contains("Verified")),
-        "{template}"
+        verified.contains("checked") && verified.contains("how"),
+        "the Verified section does not ask what was checked and how: {verified:?}"
     );
-    // The paths and the command it names exist.
-    for path in [
-        "spec/changelog.md",
-        "scripts/check.sh",
-        "tests/fixtures",
-        ".claude-plugin",
-    ] {
+    assert!(checkboxes(&verified).is_empty(), "{verified}");
+    // The paths and the section it names exist.
+    for path in code_spans(&shown).iter().filter(|s| is_repo_path(s)) {
         assert!(Path::new(ROOT).join(path).exists(), "{path}");
     }
+    assert!(shown.contains(r#"`handoff.md` §"Convenções""#), "{shown}");
+    assert!(
+        read("handoff.md").lines().any(|l| l == "## Convenções"),
+        "handoff.md has no Convenções section"
+    );
 }

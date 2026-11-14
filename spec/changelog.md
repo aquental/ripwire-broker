@@ -9404,7 +9404,7 @@ curta de "o quê e por quê", seis caixas e uma seção "Verified" em texto livr
 
 - teste vermelho antes, pela costura pública em `tests/`;
 - entrada D-NNN se houve decisão;
-- nenhum crate novo no grafo padrão (CA-10);
+- nenhum crate de rede no build padrão (CA-10), e o motivo de qualquer dependência nova;
 - `scripts/check.sh all` verde;
 - fixtures sintéticas;
 - se a PR muda o que o usuário do plugin executa (`integrations/claude-code/`, `.claude-plugin/`).
@@ -9412,8 +9412,10 @@ curta de "o quê e por quê", seis caixas e uma seção "Verified" em texto livr
 O que foi verificado, e como, fica em texto livre: "os testes passam" não é resposta, e uma caixa
 marcada não diria o quê.
 
-**As PRs do Dependabot não mudam.** O GitHub só aplica o template a uma PR aberta pela interface
-ou pelo `gh pr create` sem corpo, e o Dependabot escreve o próprio corpo.
+**As PRs do Dependabot não mudam.** O template não é aplicado pelo servidor: quem o usa para
+preencher o corpo é o cliente, a interface web e o `gh pr create` interativo (não com `--body` nem
+com `--fill`, que usa os commits). O Dependabot escreve o próprio corpo. A interface lê o template
+do branch padrão, então ele só aparece numa PR nova depois de chegar ao `master`.
 
 **Como é testado.** `tests/agents_md.rs` exige uma caixa para cada uma das seis convenções, pelas
 palavras que a caracterizam, e a seção "Verified". Sete mutantes, cada um removendo um item,
@@ -9421,4 +9423,29 @@ morreram. Um sobreviveu à primeira versão do teste: a palavra "red" casava den
 "c**red**ential", no item das fixtures. Agora o teste exige a expressão "red test".
 
 **Aceitação pendente:** abrir uma PR nova e ver o checklist. Abrir PR é do mantenedor.
+
+**Revisão adversarial** (Codex, Antigravity e o `rust-review`; o Grok rodava à parte). Nenhum
+defeito fora do teste e de duas frases. Cada mutante foi rodado de novo com um alvo de compilação
+próprio: o diretório compartilhado entre worktrees dava binários com o `CARGO_MANIFEST_DIR` de
+outra árvore e falsos sobreviventes. Válidos, em TDD:
+
+- **o item do CA-10 dizia "nenhum crate novo"**, que o CA-10 não diz (ele proíbe crate de rede no
+  build padrão; o `AGENTS.md` e o `check.sh` dizem isso), e se contradizia com "uma dependência
+  nova diz por quê". Agora: "No network crate in the default build (CA-10); any new dependency
+  says why";
+- **o teste contava caixas escondidas num comentário HTML**, que o GitHub não mostra. Agora ele lê
+  só o texto renderizado;
+- **o teste aceitava uma caixa só com todas as palavras**, e trocas que mudavam a obrigação:
+  "a red test exists", "was skipped", "a new crate is allowed", "need not be synthetic". Agora
+  são exatamente seis caixas, uma por convenção, cada uma com as palavras que carregam a obrigação
+  ("first", "green", "No network crate", "no credential", "change what plugin users run");
+- **o teste só lia a primeira linha de cada caixa**, e uma quebra de linha num template correto o
+  reprovava. Agora as linhas de continuação entram no item;
+- **"Verified" só conferia o título.** Apagar a orientação ou trocá-la por uma caixa passava. A
+  orientação agora é texto visível, e o teste exige que peça o que foi conferido e como, sem
+  caixa;
+- **os caminhos conferidos eram uma lista fixa no teste.** Agora vêm do próprio template, e o
+  ponteiro para §"Convenções" tem de achar o título no handoff;
+- **a frase sobre quando o GitHub aplica o template estava errada** (corrigida acima), e a linha de
+  status do plano dava a etapa 7 como feita sem dizer que a aceitação pede uma PR aberta.
 
