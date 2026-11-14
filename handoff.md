@@ -1,7 +1,7 @@
 # Handoff — ripwire-broker
 
 Estado em 2026-11-14, até o
-[D-200](spec/changelog.md#d-200--o-caminho-de-volta-de-uma-versão-ensaiado).
+[D-201](spec/changelog.md#d-201--as-skills-do-repositório-e-um-índice-de-decisões-em-ordem).
 Quem é agente começa pelo [`AGENTS.md`](AGENTS.md): comandos, regras e o que pede o mantenedor.
 O passo a passo de cada teste que falta está em
 [`spec/plan/roteiro-testes-pendentes.md`](spec/plan/roteiro-testes-pendentes.md).
@@ -30,7 +30,7 @@ da Cloudflare). O PRD vigente é
 | barra de status do Claude Code (§24) | feita (D-123); validada à mão numa sessão real do Claude Code 2.1.285, com fixture de payload real (D-128); as seis divergências da validação fechadas (D-129 a D-131); `hooks sem sessão` quando a entrada não traz `session_id` (D-163, #82) |
 | 6 · times e CI (HTTP autenticado, multi-workspace, políticas) | **não começada** |
 | CI com o ripwire real (D-188) | os jobs `default` e `online` instalam a última release do ripwire; os testes e2e deixaram de passar vazios no CI |
-| prontidão para agentes ([plano](spec/plan/ai-native-plan.md), D-189 a D-200) | em execução, uma branch por grupo. Feitas: a etapa 6 (`scripts/check.sh`, D-194), as 1, 2 e 4 (`AGENTS.md`, `CLAUDE.md`, a lista "Ask before" e a credencial do agente como risco aceito, D-192 e D-195), a parte de código da 3 (gitleaks no CI e no script, D-196; ligar o secret scanning e o push protection no GitHub é do mantenedor), a parte de código da 5 (aprovação do environment `release` antes do rascunho; numa PR, aviso no resumo quando o plugin muda e o `checksums.txt` conferido contra o `SHA256SUMS` do release, D-197; criar e configurar o environment é do mantenedor), a 7 (`.github/pull_request_template.md`, D-198; a aceitação pede uma PR aberta) a 8 (`spec/TEMPLATE.md`, D-199) e a 9 ("Rolling back a version" no README do plugin, ensaiada, D-200; a issue que o ensaio pede fica com o mantenedor). Falta a 10 |
+| prontidão para agentes ([plano](spec/plan/ai-native-plan.md), D-189 a D-201) | em execução, uma branch por grupo. Feitas: a etapa 6 (`scripts/check.sh`, D-194), as 1, 2 e 4 (`AGENTS.md`, `CLAUDE.md`, a lista "Ask before" e a credencial do agente como risco aceito, D-192 e D-195), a parte de código da 3 (gitleaks no CI e no script, D-196; ligar o secret scanning e o push protection no GitHub é do mantenedor), a parte de código da 5 (aprovação do environment `release` antes do rascunho; numa PR, aviso no resumo quando o plugin muda e o `checksums.txt` conferido contra o `SHA256SUMS` do release, D-197; criar e configurar o environment é do mantenedor), a 7 (`.github/pull_request_template.md`, D-198; a aceitação pede uma PR aberta) a 8 (`spec/TEMPLATE.md`, D-199), a 9 ("Rolling back a version" no README do plugin, ensaiada, D-200; a issue que o ensaio pede fica com o mantenedor) e a 10 (as skills `decision-entry`, `release` e `audit-rust` e o índice do changelog em ordem, D-201). Faltam as partes do mantenedor das etapas 3, 5, 7 e 9 |
 | auditoria de 2026-10-04 (D-143, D-144) | os cinco defeitos mais graves e os achados médios corrigidos em TDD; ficam os baixos, o código morto e as simplificações (lista abaixo) |
 | achados baixos, área da CLI e dos hooks (D-147) | corrigidos em TDD, com o código morto e as simplificações da área; as outras áreas seguem |
 | achados baixos, núcleo MCP (D-148) | corrigidos em TDD, com as simplificações da área; seguem online, memória e eval |
@@ -479,8 +479,8 @@ Cada uma custou uma conclusão errada antes de ser achada. O changelog conta sei
   função privada.
 - **Mutação para provar que um teste morde.** Já pegou meia dúzia de testes que não testavam nada.
 - **Toda decisão vira uma entrada `D-NNN` em `spec/changelog.md`,** em português: linha no índice
-  do topo e seção no fim. A ordem do índice não é uma só: o bloco do D-155 em diante é crescente
-  (linha nova depois da última), o que vem antes dele é decrescente.
+  do topo e seção no fim. O índice é crescente, do D-001 ao último, uma linha por decisão: a
+  linha nova vai no fim dele (D-201). A skill `decision-entry` faz isso.
 - **Commits e PRs em inglês;** código e comentários também. Docs de `spec/` em português.
 - **Spec nova parte do `spec/TEMPLATE.md`** (D-199): contexto e problema, objetivos e não
   objetivos, critérios de aceitação em Dado/quando/então numerados, falhas e comportamento
