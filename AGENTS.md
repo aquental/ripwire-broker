@@ -3,8 +3,8 @@
 A local MCP server in Rust between a coding agent (Claude Code, Codex) and ripwire: three tools
 that return structural context within a token budget, never writing to the workspace. Optional
 `--online` (remote classifier) and `--memory` modes; the repository root is also a Claude Code
-plugin marketplace. `integrations/codex/AGENTS.md` is product content, what `install codex`
-hands a user, not an instruction for working here.
+plugin marketplace. `integrations/codex/AGENTS.md` is product content, what the README's Codex
+setup tells a user to add to their own `AGENTS.md`, not an instruction for working here.
 
 ## Ask before
 
@@ -12,7 +12,9 @@ Ask the maintainer first, even when the command would work. Each line is an effe
 a new flag with the same effect is covered.
 
 - **Publishing:** pushing or creating a `v*` tag, creating or editing a release, `gh pr merge`,
-  `git push` to `master`, because a tag runs `.github/workflows/release.yml` and users download what it publishes.
+  `git push` to `master`, approving the `release` environment, because a tag runs
+  `.github/workflows/release.yml`, users download what it publishes, and the marketplace serves
+  `master`.
 - **Changing what plugin users run:** any edit under `integrations/claude-code/` (not only
   `integrations/claude-code/scripts/checksums.txt`: also `integrations/claude-code/hooks/register.ts`,
   `integrations/claude-code/scripts/broker`, `integrations/claude-code/.mcp.json`,
@@ -22,14 +24,15 @@ a new flag with the same effect is covered.
   `--online`, `serve --memory` (it implies online on the server), the plugin's `online`/`memory`
   options, `memory drain --online`, `doctor --jev-probe`, the `--ignored` tests of
   `tests/online_live.rs`, and `ripwire-eval` runs with paid agents, because each call is billed
-  and sends repository content out.
+  and most send workspace content out.
 - **Writing outside the repository:** `install … --write` anywhere but a temporary directory,
   because it edits the host's real configuration.
 - **Deleting real state:** `memory forget --all` on a state dir that is not a test one, because
   it is irreversible and also revokes collection.
-- **Touching the gates:** renaming jobs in `.github/workflows/rust.yml`, branch protection,
-  rulesets, environments, the gitleaks allowlist, `deny.toml`, because each one silently removes
-  a check that `master` relies on.
+- **Touching the gates:** renaming jobs or editing check steps in `.github/workflows/rust.yml`,
+  editing what `scripts/check.sh` or `.cargo/config.toml` runs, branch protection, rulesets,
+  environments, `deny.toml`, the gitleaks allowlist (plan step 3), because each one can turn a
+  required check green without checking anything.
 
 ## Credentials
 
@@ -62,8 +65,8 @@ live classifier): `README.md` §"Tests".
   (D-107).
 - TDD through the public seam: a red test in `tests/` first, never a test of a private function;
   a mutation proves the test bites.
-- Fixtures in `tests/fixtures/` stay synthetic: no credential, no private source; recordings use
-  placeholders.
+- Fixtures in `tests/fixtures/` stay synthetic: no credential, no private source; the ripwire
+  recordings come from a scratch repository, the hook recordings use placeholders.
 
 Code, comments, commits and PRs are in English; `spec/` is in Portuguese. The repository is
 public: nothing from private corpus repositories goes into a commit.

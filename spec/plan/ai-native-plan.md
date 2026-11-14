@@ -129,20 +129,20 @@ primeira tela do `AGENTS.md`. **Dependências:** mesma PR da etapa 1.
 **Arquivos:** `.github/workflows/rust.yml`, `.gitleaks.toml` (novo), `scripts/check.sh`,
 configuração do repositório.
 
-- [x] Mantenedor: ligar no GitHub `secret_scanning` e `secret_scanning_push_protection` (o
+- [ ] Mantenedor: ligar no GitHub `secret_scanning` e `secret_scanning_push_protection` (o
   repositório é público, então é gratuito). Conferir com
   `gh api repos/aquental/ripwire-broker --jq .security_and_analysis`.
-- [x] Novo job `secrets` no `rust.yml`, em `pull_request` e `push` ao `master`, **não
+- [ ] Novo job `secrets` no `rust.yml`, em `pull_request` e `push` ao `master`, **não
   obrigatório** no início: baixa o binário do gitleaks de uma release fixada, confere o SHA-256
   (mesmo padrão do passo do ripwire, sem action de terceiros) e roda
   `gitleaks detect --redact` sobre o histórico (checkout com `fetch-depth: 0`).
-- [x] `.gitleaks.toml` com allowlist por caminho e linha para os stubs sintéticos conhecidos
+- [ ] `.gitleaks.toml` com allowlist por caminho e linha para os stubs sintéticos conhecidos
   (`tests/online_units.rs`, `tests/props_fs.rs`: cabeçalhos `BEGIN … PRIVATE KEY` escritos em
   tempdir para testar o leitor), cada entrada com o motivo.
-- [x] Rodar o gitleaks localmente sobre o histórico inteiro antes de abrir a PR e tratar o que
+- [ ] Rodar o gitleaks localmente sobre o histórico inteiro antes de abrir a PR e tratar o que
   aparecer.
-- [x] `scripts/check.sh secrets`, incluído no `all` (etapa 6).
-- [x] Manter o passo "Fixtures stay synthetic": ele cobre padrões (`authorization`, `api_key`)
+- [ ] `scripts/check.sh secrets`, incluído no `all` (etapa 6).
+- [ ] Manter o passo "Fixtures stay synthetic": ele cobre padrões (`authorization`, `api_key`)
   que o gitleaks não trata como segredo.
 
 **Aceitação**, em dois ensaios separados, porque um push recusado nunca chega a virar PR:

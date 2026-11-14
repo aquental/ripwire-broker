@@ -109,6 +109,13 @@ fn cargo_aliases() -> BTreeSet<String> {
 /// Every `D-NNN` number a text cites.
 fn decisions_cited(doc: &str) -> Vec<u32> {
     doc.match_indices("D-")
+        // `UUID-123` is not a decision.
+        .filter(|(i, _)| {
+            doc[..*i]
+                .chars()
+                .next_back()
+                .is_none_or(|c| !c.is_alphanumeric())
+        })
         .filter_map(|(i, _)| {
             let digits: String = doc[i + 2..]
                 .chars()
@@ -117,6 +124,87 @@ fn decisions_cited(doc: &str) -> Vec<u32> {
             (digits.len() == 3).then(|| digits.parse().expect("three digits"))
         })
         .collect()
+}
+
+/// The anchor GitHub gives a heading: lowercase, punctuation dropped, spaces as hyphens.
+fn slug(heading: &str) -> String {
+    heading
+        .trim()
+        .to_lowercase()
+        .chars()
+        .filter(|c| c.is_alphanumeric() || matches!(c, ' ' | '-' | '_'))
+        .map(|c| if c == ' ' { '-' } else { c })
+        .collect()
+}
+
+/// The anchors of every heading in a Markdown document.
+fn anchors(doc: &str) -> BTreeSet<String> {
+    let mut fenced = false;
+    doc.lines()
+        .filter(|l| {
+            if l.trim_start().starts_with("```") {
+                fenced = !fenced;
+            }
+            !fenced && l.starts_with('#')
+        })
+        .map(|l| slug(l.trim_start_matches('#')))
+        .collect()
+}
+
+/// The targets of the Markdown links `[text](target)` of a document that point inside the
+/// repository, as (path relative to the root, anchor).
+fn local_links(doc_path: &str, doc: &str) -> Vec<(String, Option<String>)> {
+    let base = Path::new(doc_path).parent().unwrap_or(Path::new(""));
+    doc.match_indices("](")
+        .filter_map(|(i, _)| {
+            let target = doc[i + 2..].split(')').next()?;
+            (!target.starts_with("http") && !target.contains(' ')).then_some(target)
+        })
+        .map(|target| {
+            let (file, anchor) = match target.split_once('#') {
+                Some((file, anchor)) => (file, Some(anchor.to_string())),
+                None => (target, None),
+            };
+            let file = if file.is_empty() {
+                doc_path.to_string()
+            } else {
+                base.join(file).to_string_lossy().into_owned()
+            };
+            (file, anchor)
+        })
+        .collect()
+}
+
+fn assert_links_resolve(doc_path: &str) {
+    let doc = read(doc_path);
+    let links = local_links(doc_path, &doc);
+    assert!(
+        !links.is_empty(),
+        "{doc_path}: no link found, the parser broke"
+    );
+    for (file, anchor) in links {
+        assert!(
+            Path::new(ROOT).join(&file).exists(),
+            "{doc_path} links to {file}, which does not exist"
+        );
+        if let Some(anchor) = anchor {
+            assert!(
+                anchors(&read(&file)).contains(&anchor),
+                "{doc_path} links to {file}#{anchor}, which has no such heading"
+            );
+        }
+    }
+}
+
+/// The date of a decision, from its row in the changelog's index.
+fn decision_date(number: u32) -> String {
+    let changelog = read("spec/changelog.md");
+    let link = format!("[D-{number:03}](#d-{number:03}-");
+    let row = changelog
+        .lines()
+        .find(|l| l.starts_with("| 20") && l.contains(&link))
+        .unwrap_or_else(|| panic!("no index row for D-{number:03}"));
+    row[2..12].to_string()
 }
 
 #[test]
@@ -157,8 +245,8 @@ fn every_path_agents_md_cites_exists() {
 #[test]
 fn every_section_agents_md_points_to_has_that_title() {
     // A pointer is written `file.md` §"Title", the title exactly as the heading has it.
-    let agents = read("AGENTS.md");
     const MARK: &str = "` §\"";
+    let agents = read("AGENTS.md");
     let mut pointers = Vec::new();
     for (i, _) in agents.match_indices(MARK) {
         let file = agents[..i].rsplit('`').next().expect("an opening backtick");
@@ -216,17 +304,33 @@ fn every_command_agents_md_shows_runs() {
                     "check.sh has no target {target:?}"
                 );
             }
-            ["cargo", sub, ..] => {
+            ["cargo", sub] => {
                 assert!(
                     aliases.contains(*sub),
                     "cargo has no alias {sub:?}: {aliases:?}"
                 );
             }
-            _ => panic!("AGENTS.md shows a command this test cannot check: {command:?}"),
+            _ => panic!(
+                "AGENTS.md shows a command this test cannot check (only check.sh with a target \
+                 and bare cargo aliases): {command:?}"
+            ),
+        }
+    }
+    // The prose and the comments name commands too: each one must exist.
+    let verify = section(&agents, "Verify");
+    for (prefix, known) in [("scripts/check.sh ", &targets), ("cargo ", &aliases)] {
+        for (i, _) in verify.match_indices(prefix) {
+            let word: String = verify[i + prefix.len()..]
+                .chars()
+                .take_while(|c| c.is_ascii_alphanumeric() || *c == '-')
+                .collect();
+            assert!(
+                word.is_empty() || known.contains(&word),
+                "the Verify section names `{prefix}{word}`, which does not exist"
+            );
         }
     }
     // Every target the script has is named, so a new one (step 3's `secrets`) shows up here.
-    let verify = section(&agents, "Verify");
     let words: BTreeSet<&str> = verify
         .split(|c: char| !c.is_ascii_alphanumeric() && c != '-')
         .collect();
@@ -279,12 +383,22 @@ fn ask_before_is_on_the_first_screen() {
 fn ask_before_names_six_effects_each_with_its_reason_and_examples() {
     let agents = read("AGENTS.md");
     let list = section(&agents, "Ask before");
+    assert!(
+        list.trim_start().starts_with("Ask the maintainer first"),
+        "the list does not say what to do: {list}"
+    );
     let items: Vec<&str> = list.split("\n- ").skip(1).collect();
     assert_eq!(items.len(), 6, "six categories, by effect: {items:#?}");
     let expected: [(&str, &[&str]); 6] = [
         (
             "Publishing",
-            &["`v*`", "gh pr merge", "`master`", "release"],
+            &[
+                "`v*`",
+                "creating or editing a release",
+                "gh pr merge",
+                "`git push` to `master`",
+                "approving the `release` environment",
+            ],
         ),
         (
             "Changing what plugin users run",
@@ -299,6 +413,7 @@ fn ask_before_names_six_effects_each_with_its_reason_and_examples() {
             &[
                 "--online",
                 "serve --memory",
+                "the plugin's `online`/`memory` options",
                 "memory drain --online",
                 "doctor --jev-probe",
                 "tests/online_live.rs",
@@ -311,6 +426,8 @@ fn ask_before_names_six_effects_each_with_its_reason_and_examples() {
             "Touching the gates",
             &[
                 "rust.yml",
+                "scripts/check.sh",
+                ".cargo/config.toml",
                 "branch protection",
                 "ruleset",
                 "environment",
@@ -345,7 +462,12 @@ fn the_credentials_section_says_whose_login_the_session_has() {
     let flat = credentials.split_whitespace().collect::<Vec<_>>().join(" ");
     for word in [
         "maintainer",
+        "keyring",
         "D-192",
+        "accepted risk",
+        "no isolation",
+        "`git push` to `master`",
+        "Commit locally",
         "gh pr merge",
         "tag",
         "release",
@@ -394,6 +516,16 @@ fn the_handoff_header_is_as_recent_as_anything_it_says() {
         stated, newest,
         "the header stops at D-{stated}; the body cites D-{newest}"
     );
+    let date = header
+        .split("Estado em ")
+        .nth(1)
+        .and_then(|rest| rest.get(..10))
+        .expect("a date after `Estado em`");
+    let decided = decision_date(stated);
+    assert!(
+        date >= decided.as_str(),
+        "the header is dated {date}, before D-{stated} ({decided})"
+    );
     // The pointer to the changelog does not freeze a range that goes stale.
     assert!(
         !handoff.contains("D-001 a D-"),
@@ -408,5 +540,56 @@ fn the_readme_marks_forgetting_everything_as_irreversible() {
         .lines()
         .find(|l| l.starts_with("| `memory forget"))
         .expect("the memory forget row");
-    assert!(row.contains("irreversible"), "{row}");
+    assert!(row.contains("irreversible, no copy is kept"), "{row}");
+}
+
+#[test]
+fn every_link_in_agents_md_and_the_handoff_resolves() {
+    assert_links_resolve("AGENTS.md");
+    assert_links_resolve("handoff.md");
+}
+
+#[test]
+fn the_handoff_points_to_no_temporary_directory() {
+    // A session's scratchpad is gone by the time someone follows the pointer.
+    let handoff = read("handoff.md");
+    for temp in ["/private/tmp/", "/tmp/claude"] {
+        assert!(!handoff.contains(temp), "handoff.md points into {temp}");
+    }
+}
+
+#[test]
+fn a_plan_step_not_reported_done_has_no_checked_box() {
+    // The status line of the plan says which steps are done; a box elsewhere is not.
+    let plan = read("spec/plan/ai-native-plan.md");
+    let status = plan
+        .lines()
+        .find(|l| l.starts_with("Status:"))
+        .expect("the status line");
+    let reported = status
+        .split_once('(')
+        .and_then(|(_, rest)| rest.split_once(')'))
+        .map(|(inside, _)| inside)
+        .expect("the steps done, in parentheses");
+    let mut done = BTreeSet::new();
+    for word in reported.split(|c: char| !c.is_ascii_alphanumeric() && c != '-') {
+        if let Ok(step) = word.parse::<u32>() {
+            done.insert(step);
+        }
+    }
+    assert!(done.contains(&6), "the status line lost step 6: {status}");
+    let mut step = None;
+    for line in plan.lines() {
+        if let Some(rest) = line.strip_prefix("### ") {
+            step = rest.split('.').next().and_then(|n| n.parse::<u32>().ok());
+        } else if line.starts_with("## ") {
+            step = None;
+        }
+        if let Some(n) = step {
+            assert!(
+                done.contains(&n) || !line.trim_start().starts_with("- [x]"),
+                "step {n} is not reported done, yet has a checked box: {line}"
+            );
+        }
+    }
 }

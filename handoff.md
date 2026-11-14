@@ -40,7 +40,7 @@ da Cloudflare). O PRD vigente é
 | leitor do workspace por `openat` (D-152) | cada componente aberto relativo ao anterior, sem seguir link, pela crate `rustix`: um diretório trocado por link depois das conferências não leva mais para fora do workspace |
 | revisão de 2026-10-04 (D-146) | os cinco achados de maior impacto em produção corrigidos em TDD (leitura do online fora da thread assíncrona, TOCTOU do leitor, chave fora dos processos filhos, prazo no `ripwire --version`, erros do worker de memória no stderr); os demais ficam na lista abaixo |
 | plugin do Claude Code ([plano](spec/plan/mod-plan.md), §25 do PRD) | Etapas 1 e 2 implementadas (D-158, D-159): `integrations/claude-code/` é o plugin e o mod (`hooks/register.ts`, testes em `integrations/claude-code/tests/`, `claude plugin test integrations/claude-code`, Claude Code 2.1.292), a raiz é o marketplace `aquental`. Release `v0.1.0` publicado pelo `release.yml` e fixado no `checksums.txt` (D-160). Mods sem variável de early access desde o 2.1.292 (D-161); o `register.ts` e o kit tipados com as declarações do host, e `MultiEdit` como `/^MultiEdit$/` no matcher, porque o literal quebrava a inferência nos tipos do 2.1.295 (#83); o braço `broker-plugin` do eval é trabalho futuro (D-162). O que falta é do mantenedor, listado no §5a do plano: verificações numa sessão real (P1, P2, P6, P7), instalar pelo marketplace (P3), medir (P8); depois a T3.4 e a T6.1 |
-| `--memory` · memória persistente ([PRD](docs/jev-mem-prd.md), [plano](spec/plan/jev-mem-plan.md)) | Fases 0 a 5 feitas (D-136 a D-142): store, coleta pelas tools e pelos hooks, comandos locais, worker de enriquecimento no `serve --memory`, `memory drain --online`, a leitura em `context_for_task` (`memories[]`, `provenance.memory`, seção legível no texto MCP), a consolidação (cadência de 20 enriquecimentos ou 24 h, decisões e ligações por par, nota derivada pelo `--summarizer-cmd` só com o gate de 0,85) e o instrumento da avaliação (`--memory-selection deterministic`, braços `broker-memory` e `broker-memory-deterministic`, sequências no corpus, custo da memória no relatório). A T2.0 (Choice no modelo pinado) rodou com a chave real. A T3.12, o texto enriquecido das observações (`memory-observation/v2`, PRD v0.4 §5.2, D-171), está implementada e sozinha não é entregue (D-172). A entrega vem da T3.13 (D-173, PRD v0.5): `context_before_finish` aceita `note`, uma ou duas frases do agente, guardadas como nota `host_supplied`; no cenário do roteiro ela teve 0,77 e foi entregue. Pendente: a T3.11, validar num Claude Code e num Codex reais que os hosts usam as memórias; os hooks não as trazem na v1 (não fazem HTTP e não há cache de decisões). A T5.3, a rodada da avaliação, teve as etapas 0 a 3 (D-182 a D-187): `--memory` **não é promovido** (o braço B não passa no gate de custo) e a rodada do Codex ficou inconclusiva; como continuar está [abaixo](#em-andamento-a-rodada-da-memória-t53-como-continuar). Fase 6 (fechamento) não começada; **experimental**. Para acompanhar ao vivo: `--memory-debug-log` (D-164), uma linha por evento em `debug.log` ao lado do store, escrita pelo servidor, pelos hooks e pelos comandos, para `tail -F`. A leitura faz o routing junto com o primeiro scoring e não pergunta se deve parar sem evidência (D-165): 1–2 requests, cabendo nos 850 ms. Num A/B da leitura com store sintético a seleção não mudou e a mediana caiu de 782 para 524 ms; o efeito na tarefa do agente fica para a T5.3 |
+| `--memory` · memória persistente ([PRD](docs/jev-mem-prd.md), [plano](spec/plan/jev-mem-plan.md)) | Fases 0 a 5 feitas (D-136 a D-142): store, coleta pelas tools e pelos hooks, comandos locais, worker de enriquecimento no `serve --memory`, `memory drain --online`, a leitura em `context_for_task` (`memories[]`, `provenance.memory`, seção legível no texto MCP), a consolidação (cadência de 20 enriquecimentos ou 24 h, decisões e ligações por par, nota derivada pelo `--summarizer-cmd` só com o gate de 0,85) e o instrumento da avaliação (`--memory-selection deterministic`, braços `broker-memory` e `broker-memory-deterministic`, sequências no corpus, custo da memória no relatório). A T2.0 (Choice no modelo pinado) rodou com a chave real. A T3.12, o texto enriquecido das observações (`memory-observation/v2`, PRD v0.4 §5.2, D-171), está implementada e sozinha não é entregue (D-172). A entrega vem da T3.13 (D-173, PRD v0.5): `context_before_finish` aceita `note`, uma ou duas frases do agente, guardadas como nota `host_supplied`; no cenário do roteiro ela teve 0,77 e foi entregue. Pendente: a T3.11, validar num Claude Code e num Codex reais que os hosts usam as memórias; os hooks não as trazem na v1 (não fazem HTTP e não há cache de decisões). A T5.3, a rodada da avaliação, teve as etapas 0 a 3 (D-182 a D-187): `--memory` **não é promovido** (o braço B não passa no gate de custo) e a rodada do Codex ficou inconclusiva; como continuar está [abaixo](#em-andamento-a-rodada-da-memória-t53-como-continuar). Fase 6 (fechamento) não começada; **experimental**. Para acompanhar ao vivo: `--memory-debug-log` (D-164), uma linha por evento em `debug.log` ao lado do store, escrita pelo servidor, pelos hooks e pelos comandos, para `tail -F`. A leitura faz o routing junto com o primeiro scoring e não pergunta se deve parar sem evidência (D-165): 1–2 requests, cabendo nos 850 ms. Num A/B da leitura com store sintético a seleção não mudou e a mediana caiu de 782 para 524 ms |
 
 O código não tem `TODO`/`FIXME`. As pendências moram no PRD (§19, §21, §23.17) e no
 [changelog de decisões](spec/changelog.md), que é a fonte da verdade sobre o porquê de cada coisa.
@@ -175,12 +175,10 @@ está feita e `--memory` não é promovido (braço B: tokens 0,99 de A, o gate p
 
 ### Onde está o material
 
-Tudo fora do repositório, **num diretório temporário que o sistema pode apagar**. Copie o que
-quiser guardar antes de continuar:
-
-```
-/private/tmp/claude-501/-Users-aquental-projects-ai-ripwire-broker/40e3c0e8-af65-4312-b1fd-5cf8b2fa7689/scratchpad/t53/
-```
+Ficava fora do repositório, no scratchpad de uma sessão de 2026-10-11, e **não existe mais**:
+em 2026-11-14 o diretório tinha sido apagado e nenhuma cópia apareceu em `~/projects`. Se o
+mantenedor não guardou uma, a etapa 3 recomeça refazendo o corpus e o gerador; o resumo das
+etapas está no D-186 e no D-187. A tabela diz o que havia lá:
 
 | Caminho | O que é |
 |---|---|
@@ -192,7 +190,7 @@ quiser guardar antes de continuar:
 | `eval3/out` | etapa 2 (Claude Code), 286 linhas; `eval3/analysis-stage2.txt` é a análise |
 | `eval4/out` | etapa 3 (Codex), 60 linhas; `eval4/analysis.txt` |
 
-Nos comandos abaixo, `$T53` é esse diretório. O corpus guarda o caminho absoluto do clone em `repo`. Se o material mudar de lugar, gere o
+Nos comandos abaixo, `$T53` é o diretório do material refeito. O corpus guarda o caminho absoluto do clone em `repo`. Se o material mudar de lugar, gere o
 corpus de novo com `gen2.py` ou troque o caminho.
 
 ### O que fazer, em ordem
@@ -351,8 +349,8 @@ entrada no `spec/changelog.md` e atualiza a T5.3 em `spec/plan/jev-mem-plan.md`.
   braços; com a memória entregue a sessão gasta 27% menos tokens, mas ela chega em 7 de 25
   sessões com histórico relevante e a mediana do conjunto cai só 3% (gate: 10%). Em 8 leituras o
   classificador aceitou a nota e `add_memories` a tirou (`budget_omitted`): a estrutura enche os
-  2.500 tokens e a memória leva a sobra. Próximo passo: decidir como a memória entra no
-  orçamento, e só então a etapa 2.
+  2.500 tokens e a memória leva a sobra. Resolvido no D-184 (a memória entra no orçamento), e a
+  etapa 2 rodou no D-186.
 - **Etapa 0 da T5.3 (D-182): o instrumento encadeia sessões, e a primeira fumaça num repositório
   real não entregou a nota.** `ripwire-eval` ganhou `"continues": true`, o dreno do braço B entre
   sessões, `--shuffle`, `finish_notes` e `--memory-debug-log`. A fumaça no `ceci_app` achou e

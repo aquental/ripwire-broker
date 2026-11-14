@@ -9095,7 +9095,7 @@ D-193: o job `plugin` não instala mais nada.
 **Etapas 1, 2 e 4 do [plano AI-native](plan/ai-native-plan.md),** na branch
 `ai-native/1-2-4-agents-md`, empilhada sobre a da etapa 6.
 
-**O que entra.** `AGENTS.md` na raiz, em inglês, com 4,8 KB (o limite do plano é 6.000 bytes):
+**O que entra.** `AGENTS.md` na raiz, em inglês, com 5,1 KB (o limite do plano é 6.000 bytes):
 o projeto em três linhas; a lista "Ask before" logo depois, na primeira tela; a seção
 "Credentials"; os comandos de verificação (`scripts/check.sh` e seus alvos, `cargo lint`); as cinco
 regras que mais custam quando quebradas; e ponteiros para as seções do `handoff.md`, o
@@ -9125,3 +9125,43 @@ handoff; e o README marcando o `forget --all` como irreversível.
 
 **Consequência para quem registra uma decisão:** se o `handoff.md` passar a citar um D novo, o
 cabeçalho dele sobe junto, ou o teste falha. Uma decisão que não muda o handoff não o toca.
+
+**Revisão adversarial** (Codex 0.169.0 e Grok 1.0.77, em paralelo, cada achado conferido no
+código e cada mutante proposto rodado de verdade; mais a skill `rust-review` sobre
+`tests/agents_md.rs`). Codex: 6 achados, todos válidos. Grok: 17, dos quais 13 válidos, 2 em
+parte e 2 recusados. Os válidos, já sem repetição:
+
+- **um erro desta execução:** ao marcar as etapas 1, 2 e 4 no plano, o recorte pegou a etapa 3,
+  que fica entre elas, e marcou como feitos os seis itens da varredura de segredos. Desmarcados;
+  teste novo: uma etapa que a linha de status do plano não dá como feita não tem caixa marcada;
+- **uma lacuna da lista "Ask before":** os jobs obrigatórios só chamam o `scripts/check.sh`, então
+  esvaziar o script ou um alias do `.cargo/config.toml` deixa o check verde sem renomear nada. A
+  categoria dos portões passa a nomear os dois e os passos de check do workflow. "Publicar" ganha
+  aprovar o environment `release` e o motivo do `master` (é o que o marketplace serve);
+- **textos falsos no `AGENTS.md`:** o `integrations/codex/AGENTS.md` não é o que o `install codex`
+  entrega (o `install` escreve `config.toml` e hooks; o arquivo é o que a configuração manual do
+  README manda copiar); "cada chamada manda conteúdo do repositório" não vale para o
+  `doctor --jev-probe` nem para os testes ao vivo, que mandam só conteúdo inventado; e as
+  gravações do ripwire em `tests/fixtures/ripwire/` trazem caminhos reais de diretório
+  temporário, não placeholders;
+- **o que a reconciliação do handoff deixou:** o fim da linha da memória ("o efeito … fica para a
+  T5.3", que a linha nova já respondia); o "próximo passo" do D-183, resolvido pelo D-184 e pelo
+  D-186; e o caminho do material da T5.3, num scratchpad que não existe mais (conferido em
+  2026-11-14, sem cópia em `~/projects`). O handoff agora diz que o material se perdeu, salvo cópia
+  do mantenedor;
+- **testes que passavam com a propriedade quebrada** (cada mutante rodado e agora morto): `cargo
+  lint --nope` e um alias trocado no comentário ou na prosa da seção Verify; as opções
+  `online`/`memory` do plugin, o preâmbulo "Ask the maintainer first", "creating or editing a
+  release" (o `release.yml` satisfazia a palavra solta), `keyring`, "accepted risk",
+  "no isolation", "`git push` to `master`" e "Commit locally" apagados; um link Markdown ou uma
+  âncora quebrados no `AGENTS.md` ou no `handoff.md` (agora conferidos pelo slug do GitHub); a
+  data do cabeçalho do handoff voltando a 2026-10-10 (agora não pode ser anterior à linha do
+  índice do D que ele cita); "not irreversible" no README; um caminho em `/private/tmp/` no
+  handoff;
+- do `rust-review`: `D-NNN` só conta fora de palavra (`UUID-999` não é decisão), o `const` antes
+  do `let` (`clippy::items_after_statements`) e a mensagem do braço `cargo`, que só aceita alias.
+
+Recusados: um merge por `gh api …/merge` fora da lista (a lista é por efeito, e a regra diz que
+um caminho novo com o mesmo efeito está coberto); "Tudo entra por PR" em conflito com a seção de
+credenciais (as duas dizem que o `master` não recebe push do agente).
+
