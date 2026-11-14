@@ -4,8 +4,9 @@
 **Decisão que o abre:** D-NNN, se houver.
 
 <!--
-Molde de spec deste repositório: a forma que `spec/ripwire-broker-mcp.md` e `docs/jev-mem-prd.md`
-já usam. Em português, como o resto de `spec/`; nomes de código, flags e comandos ficam como são.
+Molde de spec deste repositório. Reúne as seções que aparecem num ou noutro PRD
+(`spec/ripwire-broker-mcp.md` §2, §4 e §18; `docs/jev-mem-prd.md` §12 e o "Rollback operacional"
+do §15) e dá nome próprio a duas que lá não são seção: como desfazer e decisões relacionadas. Em português, como o resto de `spec/`; nomes de código, flags e comandos ficam como são.
 Apague estes comentários ao preencher. Uma seção que não se aplica fica, com uma linha dizendo
 por quê: a ausência não diz se foi pensada.
 -->
@@ -16,6 +17,9 @@ por quê: a ausência não diz se foi pensada.
 solução aqui. -->
 
 ## Objetivos e não objetivos
+
+<!-- O que muda, como resultado observável, e o que fica de fora de propósito. Um não objetivo sem
+motivo convida a fazê-lo depois. -->
 
 **Objetivos**
 
@@ -41,8 +45,9 @@ critério vira pelo menos um teste em `tests/`, escrito vermelho antes do códig
 ## Falhas e comportamento obrigatório
 
 <!-- Para cada falha previsível (rede, disco, processo morto no meio, entrada inválida, versão
-antiga do outro lado): o que o sistema faz, e o que ele nunca faz. Falhar fechado é o padrão; uma
-falha que passa em silêncio precisa de motivo escrito. -->
+antiga do outro lado): o que o sistema faz, e o que ele nunca faz. Dizer se a falha bloqueia ou
+degrada com uma limitação estruturada, e por quê: o broker nunca bloqueia sozinho
+(`spec/ripwire-broker-mcp.md` §21.4), e uma falha silenciosa precisa de motivo escrito. -->
 
 - **<falha>:** <comportamento obrigatório>.
 

@@ -720,14 +720,14 @@ fn a_new_pr_opens_with_the_conventions_as_a_checklist() {
 
 #[test]
 fn a_new_spec_starts_from_the_shape_the_prds_use() {
-    // ai-native plan, step 8: the sections spec/ripwire-broker-mcp.md and docs/jev-mem-prd.md
-    // already have, in Portuguese like the rest of spec/.
-    let template = read("spec/TEMPLATE.md");
-    let headings: Vec<String> = template
+    // ai-native plan, step 8: the sections the PRDs (spec/ripwire-broker-mcp.md,
+    // docs/jev-mem-prd.md) use between them, in Portuguese like the rest of spec/. Only what a
+    // reader sees counts: a section inside a comment or a code block is not one.
+    let shown = visible(&read("spec/TEMPLATE.md"));
+    let headings: Vec<&str> = shown
         .lines()
         .filter_map(|l| l.strip_prefix("## "))
         .map(|h| h.trim_start_matches(|c: char| c.is_ascii_digit() || c == '.' || c == ' '))
-        .map(str::to_string)
         .collect();
     for wanted in [
         "Contexto e problema",
@@ -738,22 +738,61 @@ fn a_new_spec_starts_from_the_shape_the_prds_use() {
         "Decisões relacionadas",
     ] {
         assert!(
-            headings.iter().any(|h| h == wanted),
+            headings.contains(&wanted),
             "no `## {wanted}` section: {headings:?}"
         );
     }
+    // Status and date in the header: between the title and the first section.
+    let header: Vec<&str> = shown
+        .lines()
+        .skip_while(|l| !l.starts_with("# "))
+        .skip(1)
+        .take_while(|l| !l.starts_with("## "))
+        .collect();
     for field in ["**Status:**", "**Data:**"] {
-        assert!(template.contains(field), "no {field} in the header");
+        assert!(
+            header.iter().any(|l| l.contains(field)),
+            "no {field} in the header: {header:?}"
+        );
     }
-    // Criteria are numbered and written as Given/when/then, as the PRD's CA-NN are.
-    let criteria = section(&template, "Critérios de aceitação");
-    assert!(criteria.contains("### CA-01"), "{criteria}");
-    for criterion in criteria.split("### CA-").skip(1) {
-        for word in ["**Dado**", "**quando**", "**então**"] {
-            assert!(criterion.contains(word), "{word} missing in CA-{criterion}");
+    // Criteria: numbered CA-01, CA-02, … as the PRD's, each Given, then when, then then.
+    let criteria = section(&shown, "Critérios de aceitação");
+    let numbered: Vec<&str> = criteria
+        .lines()
+        .filter_map(|l| l.strip_prefix("### "))
+        .collect();
+    assert!(numbered.len() >= 2, "{criteria}");
+    for (n, title) in numbered.iter().enumerate() {
+        assert!(
+            title.starts_with(&format!("CA-{:02} — ", n + 1)),
+            "criterion {} is titled {title:?}",
+            n + 1
+        );
+    }
+    let mut blocks: Vec<String> = Vec::new();
+    for line in criteria.lines() {
+        if line.starts_with("### ") {
+            blocks.push(String::new());
+        }
+        if let Some(block) = blocks.last_mut() {
+            block.push_str(line);
+            block.push('\n');
         }
     }
-    // The convention points to it.
+    for criterion in &blocks {
+        let at = |word: &str| criterion.find(word);
+        let given = at("**Dado**").or_else(|| at("**Dada**"));
+        match (given, at("**quando**"), at("**então**")) {
+            (Some(g), Some(w), Some(t)) if g < w && w < t => {}
+            _ => panic!("not Given/when/then, in that order: {criterion}"),
+        }
+    }
+    // The convention points to it, as a rule.
     let conventions = section(&read("handoff.md"), "Convenções");
-    assert!(conventions.contains("spec/TEMPLATE.md"), "{conventions}");
+    assert!(
+        conventions
+            .lines()
+            .any(|l| l.starts_with("- **Spec nova parte do `spec/TEMPLATE.md`**")),
+        "{conventions}"
+    );
 }

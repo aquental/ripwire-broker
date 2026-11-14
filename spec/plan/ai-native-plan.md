@@ -328,7 +328,8 @@ funciona; `cargo build --locked` produz o mesmo resultado com e sem `.cargo/conf
 
 **Arquivos:** `spec/TEMPLATE.md` (novo); uma linha em `handoff.md` §Convenções.
 
-- [x] Forma que os PRDs já usam: contexto e problema; objetivos e não objetivos; critérios de
+- [x] Forma que os PRDs já usam (na execução: as seções que aparecem num ou noutro PRD, mais
+  "como desfazer" e "decisões relacionadas", que lá não são seção; D-199): contexto e problema; objetivos e não objetivos; critérios de
   aceitação em Dado/quando/então, numerados; falhas e comportamento obrigatório; como desfazer;
   decisões D-NNN relacionadas; status e data.
 - [x] Não reformatar os documentos existentes.
