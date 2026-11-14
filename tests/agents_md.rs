@@ -717,3 +717,43 @@ fn a_new_pr_opens_with_the_conventions_as_a_checklist() {
         "handoff.md has no Convenções section"
     );
 }
+
+#[test]
+fn a_new_spec_starts_from_the_shape_the_prds_use() {
+    // ai-native plan, step 8: the sections spec/ripwire-broker-mcp.md and docs/jev-mem-prd.md
+    // already have, in Portuguese like the rest of spec/.
+    let template = read("spec/TEMPLATE.md");
+    let headings: Vec<String> = template
+        .lines()
+        .filter_map(|l| l.strip_prefix("## "))
+        .map(|h| h.trim_start_matches(|c: char| c.is_ascii_digit() || c == '.' || c == ' '))
+        .map(str::to_string)
+        .collect();
+    for wanted in [
+        "Contexto e problema",
+        "Objetivos e não objetivos",
+        "Critérios de aceitação",
+        "Falhas e comportamento obrigatório",
+        "Como desfazer",
+        "Decisões relacionadas",
+    ] {
+        assert!(
+            headings.iter().any(|h| h == wanted),
+            "no `## {wanted}` section: {headings:?}"
+        );
+    }
+    for field in ["**Status:**", "**Data:**"] {
+        assert!(template.contains(field), "no {field} in the header");
+    }
+    // Criteria are numbered and written as Given/when/then, as the PRD's CA-NN are.
+    let criteria = section(&template, "Critérios de aceitação");
+    assert!(criteria.contains("### CA-01"), "{criteria}");
+    for criterion in criteria.split("### CA-").skip(1) {
+        for word in ["**Dado**", "**quando**", "**então**"] {
+            assert!(criterion.contains(word), "{word} missing in CA-{criterion}");
+        }
+    }
+    // The convention points to it.
+    let conventions = section(&read("handoff.md"), "Convenções");
+    assert!(conventions.contains("spec/TEMPLATE.md"), "{conventions}");
+}

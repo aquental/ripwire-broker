@@ -134,6 +134,7 @@
 | 2026-11-14 16:00 | Etapa 3 do plano AI-native, parte de código, em TDD: job `secrets` no `rust.yml` (não obrigatório) com o gitleaks 8.30.1 fixado por versão e SHA-256, `fetch-depth: 0`; `scripts/check.sh secrets`, incluído no `all`, com as resoluções de merge (`--diff-merges=remerge`), recusando clone raso e falhando quando o gitleaks loga erro ou não varre nenhum commit (ele sai 0 nesses casos); a única exceção é uma impressão digital no `.gitleaksignore` (o stub de cabeçalho de chave de `tests/props_fs.rs`), porque a allowlist por regex da primeira versão escondia uma chave real ao lado do stub. O histórico inteiro passou; amostras sintéticas numa cópia local falharam o alvo, também depois de apagadas da árvore e quando só um merge as trazia. Ligar o secret scanning e o push protection fica com o mantenedor | [D-196](#d-196--o-gitleaks-varre-o-histórico-inteiro-em-toda-pr) |
 | 2026-11-14 18:00 | Etapa 5 do plano AI-native, parte de código, em TDD: o job `draft` do `release.yml` declara `environment: release`, então a aprovação vem depois dos portões e antes do rascunho, da compilação e da publicação; numa PR, o passo "Plugin surface" do job `default` (`scripts/plugin-surface.sh`) escreve um aviso no resumo quando a PR toca `integrations/claude-code/` ou `.claude-plugin/` e, quando o `checksums.txt` muda, exige as mesmas linhas do `SHA256SUMS` do release publicado da primeira linha. Conferido contra o release `v0.1.0` real. Criar e configurar o environment fica com o mantenedor | [D-197](#d-197--um-humano-aprova-antes-de-o-release-escrever-qualquer-coisa) |
 | 2026-11-14 19:00 | Etapa 7 do plano AI-native: `.github/pull_request_template.md` com o checklist tirado das convenções do handoff (teste vermelho antes, entrada D-NNN, nenhum crate novo no build padrão, `scripts/check.sh all` verde, fixtures sintéticas, a pergunta sobre o que o usuário do plugin executa) e uma seção livre do que foi verificado e como; as PRs do Dependabot não usam o template | [D-198](#d-198--toda-pr-abre-com-as-convenções-como-checklist) |
+| 2026-11-14 19:30 | Etapa 8 do plano AI-native: `spec/TEMPLATE.md`, o molde de spec na forma que os PRDs já usam (contexto e problema, objetivos e não objetivos, critérios de aceitação Dado/quando/então numerados como os CA-NN, falhas e comportamento obrigatório, como desfazer, decisões relacionadas, status e data); a convenção do handoff aponta para ele; nenhum documento existente foi reformatado | [D-199](#d-199--uma-spec-nova-parte-de-um-molde) |
 | 2026-10-11 15:20 | Etapa 3 da T5.3 (Codex 0.161.0, `gpt-6.1-sol`): rodada de 60 sessões **inconclusiva**. 16 sessões morreram no limite de uso da conta e 9 foram invalidadas pelo guarda de contaminação; sobraram 35 válidas e 4 pares com histórico relevante (tokens B/A 0,94, IC 0,65 a 1,04). Dois achados do instrumento: o guarda marca `cat ~/.agents/skills/ripwire-*/SKILL.md` e `command -v graft` como ferramenta de contexto, e o Codex lê as skills do usuário mesmo com `--ignore-user-config` | [D-187](#d-187--etapa-3-da-t53-a-rodada-do-codex-parou-no-limite-de-uso) |
 | 2026-10-11 14:10 | Etapa 2 da T5.3: rodada completa no `ceci_app`, 13 sequências (30 sessões), braços A, B e C, 3 repetições, 270 sessões, US$ 94,24. Acerto na última sessão: A 34/37, B 37/37, C 32/34. Tokens com histórico relevante, mediana contra A: B 0,99 (IC 0,87 a 1,07), C 0,89 (IC 0,82 a 1,02). O braço B entregou a memória em 21 de 43 leituras (17 recusadas pelo classificador, 5 obsoletas); com entrega, 0,92. Latência de `context_for_task` sem piora. Cache quente: a leitura de memória não tem cache (B/A 6,9 na chamada repetida). Uma nota com muitas fontes passa da parte da memória e é cortada. **`--memory` não é promovido** | [D-186](#d-186--etapa-2-da-t53-o-braço-b-não-passa-no-gate-de-custo-o-classificador-recusa-metade-das-leituras) |
 | 2026-10-11 10:30 | O `ripwire-eval` passa a medir o Codex, em TDD: lê o transcript de `codex exec --json` com as mesmas contagens e os mesmos motivos de invalidez, e entrega o braço na linha de comando (`{codex_mcp}` vira os `-c mcp_servers.…` do braço). O registro de cada sessão ganha `memory_stop_reasons`, o `stop_reason` de cada leitura de memória | [D-185](#d-185--o-ripwire-eval-mede-o-codex-e-leva-o-stop_reason-da-leitura-ao-registro) |
@@ -9469,4 +9470,29 @@ template, o que só reforça a seção "Verified" como texto livre. Válidos e n
 
 Recusado: o texto das fixtures é o do `AGENTS.md`, palavra por palavra. A tensão com "gravações
 reais" no handoff já existia antes deste patch.
+
+## D-199 — Uma spec nova parte de um molde
+
+**Etapa 8 do [plano AI-native](plan/ai-native-plan.md),** na branch `ai-native/8-spec-template`,
+empilhada sobre a da etapa 7.
+
+**O que entra.** `spec/TEMPLATE.md`, em português como o resto de `spec/`. As seções são as que
+`spec/ripwire-broker-mcp.md` e `docs/jev-mem-prd.md` já têm:
+
+- contexto e problema;
+- objetivos e não objetivos;
+- critérios de aceitação numerados, no formato **Dado** / **quando** / **então** dos CA-01 a CA-10;
+- falhas e comportamento obrigatório, como o §12 do PRD jev-mem;
+- como desfazer;
+- decisões relacionadas;
+- status, versão e data no cabeçalho.
+
+A orientação de cada seção fica em comentário HTML, para ser apagada ao preencher. Uma seção que
+não se aplica fica com uma linha dizendo por quê.
+
+**O que não muda.** Nenhum documento existente foi reformatado. O `handoff.md` §"Convenções"
+ganhou a linha que aponta para o molde.
+
+**Como é testado.** `tests/agents_md.rs` exige as seis seções, o status e a data, um `### CA-01`
+com **Dado**, **quando** e **então** na seção de critérios, e a linha da convenção no handoff.
 
