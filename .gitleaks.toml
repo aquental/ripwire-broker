@@ -1,0 +1,18 @@
+# gitleaks over the whole history: `scripts/check.sh secrets` and the `secrets` job of
+# .github/workflows/rust.yml (ai-native plan, step 3). The default rules, plus the synthetic
+# stubs below. Every entry says why; adding one is a decision (AGENTS.md, "Touching the gates").
+
+[extend]
+useDefault = true
+
+# The online reader refuses a file that looks like a private key (src/online/reader.rs). These
+# tests write a header-only stub into a temporary directory to prove it: no key material, and
+# only these files, only these header lines.
+[[allowlists]]
+description = "Header-only private key stubs the reader's tests write to a tempdir"
+targetRules = ["private-key"]
+condition = "AND"
+paths = ['''^tests/props_fs\.rs$''', '''^tests/online_units\.rs$''']
+regexTarget = "line"
+# The header, at most three letters of body, then the closing quote: a real key's body does not fit.
+regexes = ['''-----BEGIN (OPENSSH )?PRIVATE KEY-----\\n([a-z]{1,3}\\n)?('{3}\\n)?"''']

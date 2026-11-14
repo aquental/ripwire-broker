@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Every check a pull request runs, in the order CI runs them (spec/plan/ai-native-plan.md, step 6).
 #
-#   scripts/check.sh [all|default|online|plugin]
+#   scripts/check.sh [all|default|online|plugin|secrets]
 #
 # `all` (the default) is what "everything" means: every check CI runs on a PR. It refuses to start
 # when a tool is missing instead of skipping a target. A single target is allowed and ends by
@@ -15,16 +15,16 @@ cd "$(dirname "$0")/.."
 # The Claude Code that validates the plugin, pinned: a newer validator reports warnings this one
 # does not, and --strict turns them into failures (D-193). Raising it is a decision.
 CLAUDE_CODE_VERSION=2.1.292
-TARGETS=(default online plugin)
+TARGETS=(default online plugin secrets)
 
 usage() {
-    echo "usage: scripts/check.sh [all|default|online|plugin]" >&2
+    echo "usage: scripts/check.sh [all|default|online|plugin|secrets]" >&2
     exit 2
 }
 
 case "${1:-all}" in
     all) selected=("${TARGETS[@]}") ;;
-    default | online | plugin) selected=("$1") ;;
+    default | online | plugin | secrets) selected=("$1") ;;
     *) usage ;;
 esac
 [ "$#" -le 1 ] || usage
@@ -47,6 +47,9 @@ for target in "${selected[@]}"; do
         plugin)
             need npx "install Node.js (npx runs the pinned Claude Code $CLAUDE_CODE_VERSION)"
             ;;
+        secrets)
+            need gitleaks "brew install gitleaks, or the release pinned in .github/workflows/rust.yml"
+            ;;
     esac
 done
 
@@ -54,7 +57,7 @@ done
 # (`require_ripwire!`). A full run must not count that as a pass.
 needs_ripwire=false
 for target in "${selected[@]}"; do
-    [ "$target" = plugin ] || needs_ripwire=true
+    case "$target" in default | online) needs_ripwire=true ;; esac
 done
 ripwire_missing=false
 if $needs_ripwire && ! command -v ripwire > /dev/null 2>&1; then
@@ -153,8 +156,9 @@ run_online() {
     step "Tests (online)" cargo nextest run --locked --features online
 }
 
-run_plugin() {
-    local claude=(npx -y "@anthropic-ai/claude-code@$CLAUDE_CODE_VERSION")
+# A subshell: the npm setting below stays with these three steps.
+run_plugin() (
+    claude=(npx -y "@anthropic-ai/claude-code@$CLAUDE_CODE_VERSION")
     # Claude Code installs its native binary in a postinstall script. npm 12 runs install scripts
     # only for packages on its `allow-scripts` list; older npm ignores the setting.
     export npm_config_allow_scripts=@anthropic-ai/claude-code
@@ -162,6 +166,13 @@ run_plugin() {
     step "The marketplace" "${claude[@]}" plugin validate --strict .
     # The mod's tests through Claude Code's test kit: no session, sign-in or network.
     step "The mod" "${claude[@]}" plugin test integrations/claude-code
+)
+
+# The whole history, not the tree: a secret committed and then deleted is still published.
+# The allowlist and its reasons are in .gitleaks.toml. --redact keeps a found secret out of the log.
+run_secrets() {
+    step "Secrets in the history (gitleaks)" \
+        gitleaks git --redact --verbose --no-banner --config .gitleaks.toml .
 }
 
 for target in "${selected[@]}"; do

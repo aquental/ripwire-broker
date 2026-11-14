@@ -131,6 +131,7 @@
 | 2026-11-14 12:30 | Conferência do plano AI-native contra a árvore antes de executar: referências corretas, mas o alvo `plugin` falha no `--strict` com o Claude Code local (2.1.325; o CI fixa 2.1.292), o `checksums.txt` está em `integrations/claude-code/scripts/`, e a etapa 10 partia de um estado de skills que mudou. Decisões: o `check.sh` roda o `claude` fixado via `npx`; a conferência de hashes fica no YAML, fora do script; uma branch por grupo; as skills `rust-*` versionadas à parte; TDD de docs e YAML por testes que leem os arquivos e por um harness bash com ferramentas falsas | [D-193](#d-193--o-plano-ai-native-conferido-contra-a-árvore-antes-da-execução) |
 | 2026-11-14 13:40 | Etapa 6 do plano AI-native, em TDD: `scripts/check.sh [all\|default\|online\|plugin]` passa a ser a fonte dos passos do CI; os jobs `default`, `online` e `plugin` só o chamam, com os nomes intactos. `all` recusa começar se faltar `cargo-nextest`, `npx` ou `ripwire`; um alvo isolado termina com "partial coverage". Achado no caminho: as guardas por `grep` passavam quando o próprio `grep` falhava; agora falham fechado. O `claude` fixado (2.1.292) mora no script e roda pelo `npx`, com o postinstall liberado para o npm 12 | [D-194](#d-194--um-comando-roda-tudo-o-que-o-ci-roda-numa-pr) |
 | 2026-11-14 15:30 | Etapas 1, 2 e 4 do plano AI-native, em TDD: `AGENTS.md` na raiz (4,8 KB, em inglês) roteia o agente para o handoff, o changelog, o PRD e o `scripts/check.sh`; traz as cinco regras mais caras, a lista "Ask before" (seis efeitos, cada um com motivo e exemplos) e a seção "Credentials" do D-192. `CLAUDE.md` só importa o `AGENTS.md`. O `handoff.md` passa a um estado único, até este D; o README marca `memory forget --all` como irreversível. `tests/agents_md.rs` confere tamanho, caminhos, seções, comandos e categorias | [D-195](#d-195--o-agentsmd-roteia-o-agente-e-diz-o-que-pede-um-humano) |
+| 2026-11-14 16:00 | Etapa 3 do plano AI-native, parte de código, em TDD: job `secrets` no `rust.yml` (não obrigatório) com o gitleaks 8.30.1 fixado por versão e SHA-256, `fetch-depth: 0`; `scripts/check.sh secrets`, incluído no `all`; `.gitleaks.toml` com uma allowlist (os stubs de cabeçalho de chave privada dos testes do leitor), presa a dois arquivos e a um corpo de até 3 letras. O histórico inteiro passou; uma amostra sintética `github-pat` numa cópia local falhou o alvo, também depois de apagada da árvore. Ligar o secret scanning e o push protection fica com o mantenedor | [D-196](#d-196--o-gitleaks-varre-o-histórico-inteiro-em-toda-pr) |
 | 2026-10-11 15:20 | Etapa 3 da T5.3 (Codex 0.161.0, `gpt-6.1-sol`): rodada de 60 sessões **inconclusiva**. 16 sessões morreram no limite de uso da conta e 9 foram invalidadas pelo guarda de contaminação; sobraram 35 válidas e 4 pares com histórico relevante (tokens B/A 0,94, IC 0,65 a 1,04). Dois achados do instrumento: o guarda marca `cat ~/.agents/skills/ripwire-*/SKILL.md` e `command -v graft` como ferramenta de contexto, e o Codex lê as skills do usuário mesmo com `--ignore-user-config` | [D-187](#d-187--etapa-3-da-t53-a-rodada-do-codex-parou-no-limite-de-uso) |
 | 2026-10-11 14:10 | Etapa 2 da T5.3: rodada completa no `ceci_app`, 13 sequências (30 sessões), braços A, B e C, 3 repetições, 270 sessões, US$ 94,24. Acerto na última sessão: A 34/37, B 37/37, C 32/34. Tokens com histórico relevante, mediana contra A: B 0,99 (IC 0,87 a 1,07), C 0,89 (IC 0,82 a 1,02). O braço B entregou a memória em 21 de 43 leituras (17 recusadas pelo classificador, 5 obsoletas); com entrega, 0,92. Latência de `context_for_task` sem piora. Cache quente: a leitura de memória não tem cache (B/A 6,9 na chamada repetida). Uma nota com muitas fontes passa da parte da memória e é cortada. **`--memory` não é promovido** | [D-186](#d-186--etapa-2-da-t53-o-braço-b-não-passa-no-gate-de-custo-o-classificador-recusa-metade-das-leituras) |
 | 2026-10-11 10:30 | O `ripwire-eval` passa a medir o Codex, em TDD: lê o transcript de `codex exec --json` com as mesmas contagens e os mesmos motivos de invalidez, e entrega o braço na linha de comando (`{codex_mcp}` vira os `-c mcp_servers.…` do braço). O registro de cada sessão ganha `memory_stop_reasons`, o `stop_reason` de cada leitura de memória | [D-185](#d-185--o-ripwire-eval-mede-o-codex-e-leva-o-stop_reason-da-leitura-ao-registro) |
@@ -9164,4 +9165,48 @@ parte e 2 recusados. Os válidos, já sem repetição:
 Recusados: um merge por `gh api …/merge` fora da lista (a lista é por efeito, e a regra diz que
 um caminho novo com o mesmo efeito está coberto); "Tudo entra por PR" em conflito com a seção de
 credenciais (as duas dizem que o `master` não recebe push do agente).
+
+## D-196 — O gitleaks varre o histórico inteiro em toda PR
+
+**Etapa 3 do [plano AI-native](plan/ai-native-plan.md), a parte que não é do mantenedor,** na
+branch `ai-native/3-secrets`, empilhada sobre a das etapas 1, 2 e 4.
+
+**O que entra.** Um job `secrets` no `rust.yml`, em `pull_request` e `push` ao `master`, **não
+obrigatório**: baixa o gitleaks 8.30.1 da release oficial, confere o SHA-256 escrito no próprio
+job (`551f6fc8…70eb`, conferido contra o `checksums.txt` da release e contra o tarball baixado à
+parte) e chama `scripts/check.sh secrets`, com checkout de `fetch-depth: 0`. Nenhuma action de
+terceiros. O script ganha o alvo `secrets` (`gitleaks git --redact --verbose` sobre o histórico),
+incluído no `all`; sem o `gitleaks`, o `all` recusa começar e diz como instalar. O passo "Fixtures
+stay synthetic" fica: ele pega `authorization` e `api_key`, que o gitleaks não trata como segredo.
+
+**A allowlist.** O histórico inteiro (375 commits) deu um único achado: `private-key` em
+`tests/props_fs.rs`, o stub só de cabeçalho que os testes do leitor escrevem num tempdir para
+provar que ele recusa chaves. O `.gitleaks.toml` estende as regras padrão e libera só a regra
+`private-key`, só em `tests/props_fs.rs` e `tests/online_units.rs`, e só numa linha com o
+cabeçalho seguido de no máximo três letras de corpo e a aspa que fecha. Conferido nos dois
+sentidos: os stubs passam, e uma chave com corpo real em base64 no mesmo arquivo é achada. Mexer
+na allowlist está na lista "Ask before" (portões).
+
+**Ensaio 1 do plano, local.** Num clone descartável: o alvo sai 0 no estado atual; um commit com
+um token sintético `ghp_` + 36 caracteres aleatórios faz o alvo sair 1 (regra `github-pat`, o
+segredo `REDACTED` no log); apagado o arquivo num commit seguinte, o alvo continua saindo 1,
+porque o histórico é o que conta. O clone foi apagado.
+
+**Achado no caminho:** o `export npm_config_allow_scripts` do alvo `plugin` (D-194) vazava para
+os passos seguintes; o teste do `all` com o `secrets` depois do `plugin` mostrou a variável na
+chamada do gitleaks. O `run_plugin` agora roda num subshell, e um teste novo prova que a falha
+dentro dele ainda para o `all`.
+
+**Como é testado.** Em `tests/check_script.rs`: o `secrets` no `all` e na ordem; o alvo isolado
+pede só o `gitleaks` e não avisa do ripwire; um vazamento achado falha a execução; o `all` recusa
+sem o `gitleaks`; o job do CI chama o alvo de mesmo nome; o job tem `fetch-depth: 0`,
+`persist-credentials: false`, versão exata, SHA-256 de 64 hex, `sha256sum -c` e nenhuma action do
+gitleaks. O `tests/agents_md.rs` obrigou o `AGENTS.md` a nomear o alvo novo.
+
+**Pendências do mantenedor** (a etapa não está fechada sem elas): ligar `secret_scanning` e
+`secret_scanning_push_protection` no GitHub e conferir com
+`gh api repos/aquental/ripwire-broker --jq .security_and_analysis`; conferir o job num branch
+descartável com a mesma amostra (com o push protection ainda desligado, ou com uma amostra que só
+o gitleaks pega); o ensaio 2 (um push com um segredo de tipo bloqueado é recusado). Promover o
+`secrets` a obrigatório é outra decisão, depois de duas semanas sem falso positivo.
 

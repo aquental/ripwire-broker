@@ -1,7 +1,7 @@
 # Handoff — ripwire-broker
 
 Estado em 2026-11-14, até o
-[D-195](spec/changelog.md#d-195--o-agentsmd-roteia-o-agente-e-diz-o-que-pede-um-humano).
+[D-196](spec/changelog.md#d-196--o-gitleaks-varre-o-histórico-inteiro-em-toda-pr).
 Quem é agente começa pelo [`AGENTS.md`](AGENTS.md): comandos, regras e o que pede o mantenedor.
 O passo a passo de cada teste que falta está em
 [`spec/plan/roteiro-testes-pendentes.md`](spec/plan/roteiro-testes-pendentes.md).
@@ -30,7 +30,7 @@ da Cloudflare). O PRD vigente é
 | barra de status do Claude Code (§24) | feita (D-123); validada à mão numa sessão real do Claude Code 2.1.285, com fixture de payload real (D-128); as seis divergências da validação fechadas (D-129 a D-131); `hooks sem sessão` quando a entrada não traz `session_id` (D-163, #82) |
 | 6 · times e CI (HTTP autenticado, multi-workspace, políticas) | **não começada** |
 | CI com o ripwire real (D-188) | os jobs `default` e `online` instalam a última release do ripwire; os testes e2e deixaram de passar vazios no CI |
-| prontidão para agentes ([plano](spec/plan/ai-native-plan.md), D-189 a D-195) | em execução, uma branch por grupo. Feitas: a etapa 6 (`scripts/check.sh`, D-194) e as 1, 2 e 4 (`AGENTS.md`, `CLAUDE.md`, a lista "Ask before" e a credencial do agente como risco aceito, D-192 e D-195). Faltam as 3, 5, 7, 8, 9 e 10 |
+| prontidão para agentes ([plano](spec/plan/ai-native-plan.md), D-189 a D-196) | em execução, uma branch por grupo. Feitas: a etapa 6 (`scripts/check.sh`, D-194), as 1, 2 e 4 (`AGENTS.md`, `CLAUDE.md`, a lista "Ask before" e a credencial do agente como risco aceito, D-192 e D-195) e a parte de código da 3 (gitleaks no CI e no script, D-196; ligar o secret scanning e o push protection no GitHub é do mantenedor). Faltam as 5, 7, 8, 9 e 10 |
 | auditoria de 2026-10-04 (D-143, D-144) | os cinco defeitos mais graves e os achados médios corrigidos em TDD; ficam os baixos, o código morto e as simplificações (lista abaixo) |
 | achados baixos, área da CLI e dos hooks (D-147) | corrigidos em TDD, com o código morto e as simplificações da área; as outras áreas seguem |
 | achados baixos, núcleo MCP (D-148) | corrigidos em TDD, com as simplificações da área; seguem online, memória e eval |
@@ -48,20 +48,23 @@ O código não tem `TODO`/`FIXME`. As pendências moram no PRD (§19, §21, §23
 ## Como verificar
 
 ```sh
-scripts/check.sh            # tudo o que o CI roda numa PR: default, online e plugin, na ordem do CI
-scripts/check.sh default    # um alvo só (também online, plugin): termina com "partial coverage"
+scripts/check.sh            # tudo o que o CI roda numa PR: default, online, plugin e secrets
+scripts/check.sh default    # um alvo só (também online, plugin, secrets): termina com "partial coverage"
 cargo lint                  # o clippy do job default (alias em .cargo/config.toml); também lint-online
 ```
 
 - Sem alvo (`all`), o script recusa começar se faltar ferramenta (`cargo`, `cargo-nextest`,
-  `npx`, `ripwire`) e diz o que instalar. Um alvo isolado confere só as ferramentas dele. Sem o
+  `npx`, `gitleaks`, `ripwire`) e diz o que instalar. Um alvo isolado confere só as ferramentas dele. Sem o
   `ripwire` no `PATH`, os testes e2e retornam cedo e passam sem testar nada
   (`require_ripwire!`): em `all` isso é falha; num alvo isolado, aviso e cobertura parcial.
 - O alvo `plugin` roda o Claude Code fixado no script (`CLAUDE_CODE_VERSION`, 2.1.292) pelo `npx`,
   não o instalado: o validador mais novo reprova o plugin com avisos que o fixado não emite (D-193).
-- **CI** (`.github/workflows/rust.yml`): os jobs `default`, `online` e `plugin` chamam
-  `scripts/check.sh default|online|plugin`; os passos moram no script. `default` e `online` são
-  obrigatórios no `master`; `plugin` não. Nos jobs `default` e `online`, o CI instala o
+- **CI** (`.github/workflows/rust.yml`): os jobs `default`, `online`, `plugin` e `secrets` chamam
+  `scripts/check.sh` com o alvo de mesmo nome; os passos moram no script. `default` e `online` são
+  obrigatórios no `master`; `plugin` e `secrets` não (o `secrets` vira obrigatório por decisão,
+  depois de duas semanas sem falso positivo, D-196). O `secrets` roda o gitleaks fixado (versão e
+  SHA-256 no job) sobre o histórico inteiro; a allowlist, com o motivo de cada entrada, é o
+  `.gitleaks.toml`. Nos jobs `default` e `online`, o CI instala o
   `ripwire` (última release, D-188) e o nextest antes de chamar o script.
 - **Release** (`.github/workflows/release.yml`, D-160): só numa tag `v*` igual à versão do
   `Cargo.toml`. Chama o `rust.yml`, compila os quatro alvos e publica tarballs e `SHA256SUMS`. A

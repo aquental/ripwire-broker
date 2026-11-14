@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 const SCRIPT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/scripts/check.sh");
-const ALL_TOOLS: &[&str] = &["cargo", "cargo-nextest", "npx", "ripwire"];
+const ALL_TOOLS: &[&str] = &["cargo", "cargo-nextest", "npx", "ripwire", "gitleaks"];
 
 /// A sealed directory of tools (the fakes asked for plus the few host utilities the script uses)
 /// and a tree holding a copy of the script and a clean `tests/fixtures/`.
@@ -205,8 +205,11 @@ const PLUGIN_CALLS: &[&str] = &[
     "npx -y @anthropic-ai/claude-code@2.1.292 plugin test integrations/claude-code [allow-scripts=@anthropic-ai/claude-code]",
 ];
 
+const SECRETS_CALLS: &[&str] =
+    &["gitleaks git --redact --verbose --no-banner --config .gitleaks.toml ."];
+
 fn every_call() -> Vec<&'static str> {
-    [DEFAULT_CALLS, ONLINE_CALLS, PLUGIN_CALLS].concat()
+    [DEFAULT_CALLS, ONLINE_CALLS, PLUGIN_CALLS, SECRETS_CALLS].concat()
 }
 
 #[test]
@@ -228,9 +231,10 @@ fn no_target_means_all() {
 #[test]
 fn each_target_runs_only_its_own_checks_and_reports_partial_coverage() {
     for (target, calls, rest) in [
-        ("default", DEFAULT_CALLS, "online, plugin"),
-        ("online", ONLINE_CALLS, "default, plugin"),
-        ("plugin", PLUGIN_CALLS, "default, online"),
+        ("default", DEFAULT_CALLS, "online, plugin, secrets"),
+        ("online", ONLINE_CALLS, "default, plugin, secrets"),
+        ("plugin", PLUGIN_CALLS, "default, online, secrets"),
+        ("secrets", SECRETS_CALLS, "default, online, plugin"),
     ] {
         let run = Sandbox::all().run(&[target]);
         assert!(run.ok(), "{target}: {}", run.both());
@@ -335,6 +339,7 @@ fn all_fails_up_front_naming_what_to_install_when_a_tool_is_missing() {
         ("cargo-nextest", "cargo-nextest"),
         ("npx", "Node.js"),
         ("cargo", "rustup"),
+        ("gitleaks", "brew install gitleaks"),
     ] {
         let run = Sandbox::without(tool).run(&["all"]);
         assert!(!run.ok(), "{tool}");
@@ -354,8 +359,41 @@ fn default_passes_without_npx_and_says_coverage_is_partial() {
     assert_eq!(run.calls(), DEFAULT_CALLS);
     assert_eq!(
         run.last_line(),
-        "partial coverage: ran default; did not run online, plugin"
+        "partial coverage: ran default; did not run online, plugin, secrets"
     );
+}
+
+#[test]
+fn secrets_needs_only_gitleaks_and_no_ripwire() {
+    let run = Sandbox::with(&["gitleaks"]).run(&["secrets"]);
+    assert!(run.ok(), "{}", run.both());
+    assert_eq!(run.calls(), SECRETS_CALLS);
+    assert!(!run.stderr.contains("ripwire"), "{}", run.stderr);
+    assert_eq!(
+        run.last_line(),
+        "partial coverage: ran secrets; did not run default, online, plugin"
+    );
+}
+
+#[test]
+fn a_failing_plugin_check_stops_the_run_before_the_next_target() {
+    // run_plugin is a subshell (its npm setting stays inside); its failure must still stop `all`.
+    let run = Sandbox::all()
+        .env("FAKE_FAIL", "validate --strict .")
+        .run(&["all"]);
+    assert!(!run.ok(), "{}", run.both());
+    assert_eq!(run.calls().last().copied(), Some(PLUGIN_CALLS[1]));
+    assert!(!run.stdout.contains("passed"), "{}", run.stdout);
+}
+
+#[test]
+fn a_leak_found_by_gitleaks_fails_the_run() {
+    let run = Sandbox::all()
+        .env("FAKE_FAIL", "gitleaks git")
+        .run(&["all"]);
+    assert!(!run.ok(), "{}", run.both());
+    assert_eq!(run.calls().last().copied(), Some(SECRETS_CALLS[0]));
+    assert!(!run.stdout.contains("passed"), "{}", run.stdout);
 }
 
 #[test]
@@ -442,7 +480,7 @@ fn job_block(yml: &str, job: &str) -> Vec<String> {
 fn ci_jobs_call_the_script_under_their_required_names() {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(".github/workflows/rust.yml");
     let yml = fs::read_to_string(&path).expect("rust.yml");
-    for job in ["default", "online", "plugin"] {
+    for job in ["default", "online", "plugin", "secrets"] {
         let block = job_block(&yml, job);
         assert!(
             block.contains(&format!("    name: {job}")),
@@ -454,6 +492,35 @@ fn ci_jobs_call_the_script_under_their_required_names() {
             .collect();
         assert_eq!(calls, [job], "job {job} must call its own target");
     }
+}
+
+#[test]
+fn the_secrets_job_scans_the_whole_history_with_a_pinned_gitleaks() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(".github/workflows/rust.yml");
+    let yml = fs::read_to_string(&path).expect("rust.yml");
+    let block = job_block(&yml, "secrets").join("\n");
+    // A shallow checkout scans one commit: a secret added and removed earlier would pass.
+    assert!(block.contains("fetch-depth: 0"), "{block}");
+    assert!(block.contains("persist-credentials: false"), "{block}");
+    // A fixed release, its hash written here, checked before anything runs; no third-party action.
+    let version = block
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("GITLEAKS_VERSION: "))
+        .expect("GITLEAKS_VERSION pinned in the job");
+    assert!(
+        version.split('.').all(|n| n.parse::<u32>().is_ok()) && version.split('.').count() == 3,
+        "not an exact version: {version}"
+    );
+    let sha = block
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("GITLEAKS_SHA256: "))
+        .expect("GITLEAKS_SHA256 pinned in the job");
+    assert!(
+        sha.len() == 64 && sha.chars().all(|c| c.is_ascii_hexdigit()),
+        "{sha}"
+    );
+    assert!(block.contains("sha256sum -c"), "{block}");
+    assert!(!block.contains("uses: gitleaks/"), "{block}");
 }
 
 #[test]
