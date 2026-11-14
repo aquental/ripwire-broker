@@ -130,6 +130,7 @@
 | 2026-11-14 11:32 | Substitui o D-190 e o D-191: as sessões de agente continuam com o login do mantenedor ao alcance, sem isolamento; risco aceito. Os itens de credenciais e de humano no caminho da auditoria AINE seguem reprovados por decisão | [D-192](#d-192--credencial-do-agente-risco-aceito) |
 | 2026-11-14 12:30 | Conferência do plano AI-native contra a árvore antes de executar: referências corretas, mas o alvo `plugin` falha no `--strict` com o Claude Code local (2.1.325; o CI fixa 2.1.292), o `checksums.txt` está em `integrations/claude-code/scripts/`, e a etapa 10 partia de um estado de skills que mudou. Decisões: o `check.sh` roda o `claude` fixado via `npx`; a conferência de hashes fica no YAML, fora do script; uma branch por grupo; as skills `rust-*` versionadas à parte; TDD de docs e YAML por testes que leem os arquivos e por um harness bash com ferramentas falsas | [D-193](#d-193--o-plano-ai-native-conferido-contra-a-árvore-antes-da-execução) |
 | 2026-11-14 13:40 | Etapa 6 do plano AI-native, em TDD: `scripts/check.sh [all\|default\|online\|plugin]` passa a ser a fonte dos passos do CI; os jobs `default`, `online` e `plugin` só o chamam, com os nomes intactos. `all` recusa começar se faltar `cargo-nextest`, `npx` ou `ripwire`; um alvo isolado termina com "partial coverage". Achado no caminho: as guardas por `grep` passavam quando o próprio `grep` falhava; agora falham fechado. O `claude` fixado (2.1.292) mora no script e roda pelo `npx`, com o postinstall liberado para o npm 12 | [D-194](#d-194--um-comando-roda-tudo-o-que-o-ci-roda-numa-pr) |
+| 2026-11-14 15:30 | Etapas 1, 2 e 4 do plano AI-native, em TDD: `AGENTS.md` na raiz (4,8 KB, em inglês) roteia o agente para o handoff, o changelog, o PRD e o `scripts/check.sh`; traz as cinco regras mais caras, a lista "Ask before" (seis efeitos, cada um com motivo e exemplos) e a seção "Credentials" do D-192. `CLAUDE.md` só importa o `AGENTS.md`. O `handoff.md` passa a um estado único, até este D; o README marca `memory forget --all` como irreversível. `tests/agents_md.rs` confere tamanho, caminhos, seções, comandos e categorias | [D-195](#d-195--o-agentsmd-roteia-o-agente-e-diz-o-que-pede-um-humano) |
 | 2026-10-11 15:20 | Etapa 3 da T5.3 (Codex 0.161.0, `gpt-6.1-sol`): rodada de 60 sessões **inconclusiva**. 16 sessões morreram no limite de uso da conta e 9 foram invalidadas pelo guarda de contaminação; sobraram 35 válidas e 4 pares com histórico relevante (tokens B/A 0,94, IC 0,65 a 1,04). Dois achados do instrumento: o guarda marca `cat ~/.agents/skills/ripwire-*/SKILL.md` e `command -v graft` como ferramenta de contexto, e o Codex lê as skills do usuário mesmo com `--ignore-user-config` | [D-187](#d-187--etapa-3-da-t53-a-rodada-do-codex-parou-no-limite-de-uso) |
 | 2026-10-11 14:10 | Etapa 2 da T5.3: rodada completa no `ceci_app`, 13 sequências (30 sessões), braços A, B e C, 3 repetições, 270 sessões, US$ 94,24. Acerto na última sessão: A 34/37, B 37/37, C 32/34. Tokens com histórico relevante, mediana contra A: B 0,99 (IC 0,87 a 1,07), C 0,89 (IC 0,82 a 1,02). O braço B entregou a memória em 21 de 43 leituras (17 recusadas pelo classificador, 5 obsoletas); com entrega, 0,92. Latência de `context_for_task` sem piora. Cache quente: a leitura de memória não tem cache (B/A 6,9 na chamada repetida). Uma nota com muitas fontes passa da parte da memória e é cortada. **`--memory` não é promovido** | [D-186](#d-186--etapa-2-da-t53-o-braço-b-não-passa-no-gate-de-custo-o-classificador-recusa-metade-das-leituras) |
 | 2026-10-11 10:30 | O `ripwire-eval` passa a medir o Codex, em TDD: lê o transcript de `codex exec --json` com as mesmas contagens e os mesmos motivos de invalidez, e entrega o braço na linha de comando (`{codex_mcp}` vira os `-c mcp_servers.…` do braço). O registro de cada sessão ganha `memory_stop_reasons`, o `stop_reason` de cada leitura de memória | [D-185](#d-185--o-ripwire-eval-mede-o-codex-e-leva-o-stop_reason-da-leitura-ao-registro) |
@@ -9088,3 +9089,39 @@ Recusados, com o motivo: o timeout de 12 min cobrindo o passo inteiro (o plano p
 CI); as strings do plano em português (o script imprime inglês, e os testes conferem o inglês).
 A versão do Claude Code ficou no script (`CLAUDE_CODE_VERSION`), não no `rust.yml` como dizia o
 D-193: o job `plugin` não instala mais nada.
+
+## D-195 — O `AGENTS.md` roteia o agente e diz o que pede um humano
+
+**Etapas 1, 2 e 4 do [plano AI-native](plan/ai-native-plan.md),** na branch
+`ai-native/1-2-4-agents-md`, empilhada sobre a da etapa 6.
+
+**O que entra.** `AGENTS.md` na raiz, em inglês, com 4,8 KB (o limite do plano é 6.000 bytes):
+o projeto em três linhas; a lista "Ask before" logo depois, na primeira tela; a seção
+"Credentials"; os comandos de verificação (`scripts/check.sh` e seus alvos, `cargo lint`); as cinco
+regras que mais custam quando quebradas; e ponteiros para as seções do `handoff.md`, o
+changelog, o PRD e o §Tests do README. Diz que `integrations/codex/AGENTS.md` é conteúdo de
+produto. `CLAUDE.md` tem só `@AGENTS.md`, para o Claude Code carregar o mesmo texto.
+
+**A lista "Ask before" é por efeito, não por flag:** publicar; mudar o que o usuário do plugin
+executa; gastar dinheiro ou mandar conteúdo a um provider; escrever fora do repositório; apagar
+estado real; mexer nos portões. Cada linha diz o motivo e dá os exemplos do plano. Pelo D-192,
+ela e a seção "Credentials" são a única proteção contra um agente com o login do mantenedor, e
+ambas dependem de o agente obedecer.
+
+**O `handoff.md` reconciliado consigo mesmo.** O cabeçalho dizia "até o D-169" e o corpo já
+citava o D-187. Agora: cabeçalho datado até este D, a T5.3 e o D-188 na tabela de estado, uma
+linha para o plano AI-native, o mapa com o `AGENTS.md` e o `scripts/check.sh`, a credencial do
+agente em §"Convenções", e o ponteiro para o changelog sem a faixa "D-001 a D-169", que
+envelhecia. O aviso de que o repositório mudou de lugar ganhou que hoje há um clone em cada
+caminho.
+
+**Como é testado** (`tests/agents_md.rs`, 12 testes, todos vermelhos antes dos arquivos): o
+tamanho; todo caminho citado existe; todo ponteiro `arquivo` §"Título" acha um título igual; todo
+comando mostrado roda (alvo aceito pelo `usage` do `check.sh`, ou alias do `.cargo/config.toml`)
+e todo alvo do script é nomeado, o que pega o `secrets` da etapa 3; as cinco regras; as seis
+categorias na ordem, cada uma com motivo e exemplos; a lista terminando até a linha 60; a seção
+de credenciais; o `CLAUDE.md` exato; o cabeçalho do handoff citando o D mais alto do próprio
+handoff; e o README marcando o `forget --all` como irreversível.
+
+**Consequência para quem registra uma decisão:** se o `handoff.md` passar a citar um D novo, o
+cabeçalho dele sobe junto, ou o teste falha. Uma decisão que não muda o handoff não o toca.

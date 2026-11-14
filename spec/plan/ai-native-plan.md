@@ -3,7 +3,7 @@
 Data: **2026-11-14**. Base: `master`, HEAD `d9aa86e`.
 Origem: [`docs/AINE-REPORT.md`](../../docs/AINE-REPORT.md) (26 aprovados, 20 reprovados, 0 não
 aplicáveis).
-Status: **em execução** (etapa 6 feita, D-194). Revisado pelo Codex em 2026-11-14: 14 achados, todos
+Status: **em execução** (etapa 6 feita, D-194; etapas 1, 2 e 4, D-195). Revisado pelo Codex em 2026-11-14: 14 achados, todos
 conferidos no código e incorporados (ver [Revisão adversarial](#revisão-adversarial)).
 Decisão: [D-189](../changelog.md#d-189--plano-de-prontidão-para-agentes-revisado-pelo-codex).
 Conferido contra a árvore antes da execução em 2026-11-14
@@ -67,7 +67,7 @@ tomada na execução vira uma entrada `D-NNN` em [`spec/changelog.md`](../change
 
 **Arquivos:** `AGENTS.md` (novo), `CLAUDE.md` (novo, só a linha `@AGENTS.md`), `handoff.md`.
 
-- [ ] Criar `AGENTS.md` com no máximo ~1.500 tokens (6 KB), em inglês (convenção: código, commits
+- [x] Criar `AGENTS.md` com no máximo ~1.500 tokens (6 KB), em inglês (convenção: código, commits
   e PRs em inglês; `spec/` em português). Conteúdo próprio, sem copiar o `handoff.md`:
   - o que é o projeto, em três linhas;
   - os comandos de verificação (o script da etapa 6 e seus subcomandos);
@@ -78,15 +78,15 @@ tomada na execução vira uma entrada `D-NNN` em [`spec/changelog.md`](../change
     rede no build padrão (CA-10); não renomear os jobs `default`/`online`; TDD pela costura
     pública em `tests/`; fixtures sempre sintéticas;
   - a lista "Ask before" da etapa 2.
-- [ ] `CLAUDE.md` com `@AGENTS.md`, para o Claude Code carregar o mesmo texto.
-- [ ] Declarar no `AGENTS.md` que `integrations/codex/AGENTS.md` é conteúdo de produto (o que o
+- [x] `CLAUDE.md` com `@AGENTS.md`, para o Claude Code carregar o mesmo texto.
+- [x] Declarar no `AGENTS.md` que `integrations/codex/AGENTS.md` é conteúdo de produto (o que o
   `install codex` entrega ao usuário), não instrução para trabalhar neste repositório.
-- [ ] Reconciliar o `handoff.md` consigo mesmo. O cabeçalho diz "Estado em 2026-10-10, até o
+- [x] Reconciliar o `handoff.md` consigo mesmo. O cabeçalho diz "Estado em 2026-10-10, até o
   D-169", mas a seção da T5.3 (linha 160) e as pendências (linha 326) já trazem o D-185 ao
   D-187; só o D-188 falta. Atualizar o cabeçalho, a tabela de estado e §"Como verificar" (o CI
   instala o ripwire desde o D-188) para um estado único e datado. Uma frase genérica "o
   changelog prevalece" não basta: deixaria instruções operacionais antigas no caminho do agente.
-- [ ] Conferir cada caminho e cada comando citado contra a árvore antes de entregar.
+- [x] Conferir cada caminho e cada comando citado contra a árvore antes de entregar.
 
 **Aceitação:** `wc -c AGENTS.md` ≤ 6.000; todo caminho citado existe e todo comando citado
 roda; `scripts/check.sh all` verde (inclui `tests/plugin.rs` e os dois
@@ -102,7 +102,7 @@ como estão.
 As regras são escritas pelo efeito, não pela flag: uma flag nova com o mesmo efeito já está
 coberta.
 
-- [ ] Seção "Ask before" no `AGENTS.md`, com o motivo de cada linha:
+- [x] Seção "Ask before" no `AGENTS.md`, com o motivo de cada linha:
   - **publicar**: criar ou empurrar uma tag `v*`, criar ou editar um release, `gh pr merge`,
     `git push` para o `master`;
   - **mudar o que o usuário do plugin executa**: qualquer edição em `integrations/claude-code/`
@@ -119,7 +119,7 @@ coberta.
   - **apagar estado real**: `memory forget --all` em um state dir que não seja de teste;
   - **mexer nos portões**: renomear jobs do `rust.yml`, proteção de branch, rulesets,
     environments, a allowlist do gitleaks, o `deny.toml`.
-- [ ] No `README.md`, marcar `memory forget --all` como irreversível.
+- [x] No `README.md`, marcar `memory forget --all` como irreversível.
 
 **Aceitação:** as seis categorias existem, cada uma com o motivo e os exemplos; a lista está na
 primeira tela do `AGENTS.md`. **Dependências:** mesma PR da etapa 1.
@@ -129,20 +129,20 @@ primeira tela do `AGENTS.md`. **Dependências:** mesma PR da etapa 1.
 **Arquivos:** `.github/workflows/rust.yml`, `.gitleaks.toml` (novo), `scripts/check.sh`,
 configuração do repositório.
 
-- [ ] Mantenedor: ligar no GitHub `secret_scanning` e `secret_scanning_push_protection` (o
+- [x] Mantenedor: ligar no GitHub `secret_scanning` e `secret_scanning_push_protection` (o
   repositório é público, então é gratuito). Conferir com
   `gh api repos/aquental/ripwire-broker --jq .security_and_analysis`.
-- [ ] Novo job `secrets` no `rust.yml`, em `pull_request` e `push` ao `master`, **não
+- [x] Novo job `secrets` no `rust.yml`, em `pull_request` e `push` ao `master`, **não
   obrigatório** no início: baixa o binário do gitleaks de uma release fixada, confere o SHA-256
   (mesmo padrão do passo do ripwire, sem action de terceiros) e roda
   `gitleaks detect --redact` sobre o histórico (checkout com `fetch-depth: 0`).
-- [ ] `.gitleaks.toml` com allowlist por caminho e linha para os stubs sintéticos conhecidos
+- [x] `.gitleaks.toml` com allowlist por caminho e linha para os stubs sintéticos conhecidos
   (`tests/online_units.rs`, `tests/props_fs.rs`: cabeçalhos `BEGIN … PRIVATE KEY` escritos em
   tempdir para testar o leitor), cada entrada com o motivo.
-- [ ] Rodar o gitleaks localmente sobre o histórico inteiro antes de abrir a PR e tratar o que
+- [x] Rodar o gitleaks localmente sobre o histórico inteiro antes de abrir a PR e tratar o que
   aparecer.
-- [ ] `scripts/check.sh secrets`, incluído no `all` (etapa 6).
-- [ ] Manter o passo "Fixtures stay synthetic": ele cobre padrões (`authorization`, `api_key`)
+- [x] `scripts/check.sh secrets`, incluído no `all` (etapa 6).
+- [x] Manter o passo "Fixtures stay synthetic": ele cobre padrões (`authorization`, `api_key`)
   que o gitleaks não trata como segredo.
 
 **Aceitação**, em dois ensaios separados, porque um push recusado nunca chega a virar PR:
@@ -189,8 +189,8 @@ API, mesclar uma PR (o `master` exige os checks e nenhuma revisão), aprovar o e
 
 **O que sobra como proteção**, toda ela dependente de o agente obedecer:
 
-- [ ] a lista "Ask before" da etapa 2, que nomeia exatamente essas ações;
-- [ ] uma seção "Credentials" no `AGENTS.md`: a sessão tem o login do mantenedor; `git push`
+- [x] a lista "Ask before" da etapa 2, que nomeia exatamente essas ações;
+- [x] uma seção "Credentials" no `AGENTS.md`: a sessão tem o login do mantenedor; `git push`
   para o `master`, tags, releases, `gh pr merge` e aprovações de environment são sempre do
   mantenedor, mesmo que o comando funcione;
 - [ ] os modos de permissão do host (confirmação antes de `git push` e de `gh` que escreve),
