@@ -3,7 +3,7 @@
 Data: **2026-11-14**. Base: `master`, HEAD `d9aa86e`.
 Origem: [`docs/AINE-REPORT.md`](../../docs/AINE-REPORT.md) (26 aprovados, 20 reprovados, 0 não
 aplicáveis).
-Status: **em execução** (etapa 6 feita, D-194; etapas 1, 2 e 4, D-195; etapa 3 sem a parte do mantenedor, D-196; etapa 5 sem a parte do mantenedor, D-197). Revisado pelo Codex em 2026-11-14: 14 achados, todos
+Status: **em execução** (etapa 6 feita, D-194; etapas 1, 2 e 4, D-195; etapa 3 sem a parte do mantenedor, D-196; etapa 5 sem a parte do mantenedor, D-197; etapa 7, D-198). Revisado pelo Codex em 2026-11-14: 14 achados, todos
 conferidos no código e incorporados (ver [Revisão adversarial](#revisão-adversarial)).
 Decisão: [D-189](../changelog.md#d-189--plano-de-prontidão-para-agentes-revisado-pelo-codex).
 Conferido contra a árvore antes da execução em 2026-11-14
@@ -317,7 +317,7 @@ funciona; `cargo build --locked` produz o mesmo resultado com e sem `.cargo/conf
 
 **Arquivos:** `.github/pull_request_template.md` (novo).
 
-- [ ] Checklist curto, tirado do `handoff.md` §Convenções: teste vermelho antes; entrada D-NNN
+- [x] Checklist curto, tirado do `handoff.md` §Convenções: teste vermelho antes; entrada D-NNN
   se houve decisão; nenhum crate novo no grafo padrão; `scripts/check.sh all` verde; fixtures
   sintéticas; "esta PR muda o que o usuário do plugin executa? (`integrations/claude-code/`,
   `.claude-plugin/`)"; o que foi verificado e como.

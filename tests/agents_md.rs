@@ -593,3 +593,51 @@ fn a_plan_step_not_reported_done_has_no_checked_box() {
         }
     }
 }
+
+#[test]
+fn a_new_pr_opens_with_the_conventions_as_a_checklist() {
+    // ai-native plan, step 7: the checklist comes from handoff.md §"Convenções". Each item is a
+    // checkbox a reviewer can see unticked.
+    let template = read(".github/pull_request_template.md");
+    let items: Vec<String> = template
+        .lines()
+        .filter_map(|l| l.trim_start().strip_prefix("- [ ] "))
+        .map(|l| l.split_whitespace().collect::<Vec<_>>().join(" "))
+        .collect();
+    let item = |words: &[&str]| items.iter().any(|i| words.iter().all(|w| i.contains(w)));
+    for (what, words) in [
+        ("a red test first", &["red test", "tests/"][..]),
+        ("a decision entry", &["D-NNN", "spec/changelog.md"]),
+        (
+            "no new crate in the default build",
+            &["crate", "default", "CA-10"],
+        ),
+        ("the one command", &["scripts/check.sh all"]),
+        ("synthetic fixtures", &["tests/fixtures/", "synthetic"]),
+        (
+            "what plugin users run",
+            &["integrations/claude-code/", ".claude-plugin/"],
+        ),
+    ] {
+        assert!(
+            item(words),
+            "no checklist item for {what} ({words:?}): {items:#?}"
+        );
+    }
+    // What was verified and how: free text, not a box to tick.
+    assert!(
+        template
+            .lines()
+            .any(|l| l.starts_with("## ") && l.contains("Verified")),
+        "{template}"
+    );
+    // The paths and the command it names exist.
+    for path in [
+        "spec/changelog.md",
+        "scripts/check.sh",
+        "tests/fixtures",
+        ".claude-plugin",
+    ] {
+        assert!(Path::new(ROOT).join(path).exists(), "{path}");
+    }
+}
