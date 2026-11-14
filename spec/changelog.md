@@ -9329,7 +9329,9 @@ aprovação e o passo da PR. A lista "Ask before" do `AGENTS.md` cobre qualquer 
 diretório. Esta foi feita porque a etapa 5, que o usuário mandou executar, a pede por nome, e o
 arquivo é documentação, não algo que o usuário executa.
 
-**Pendências do mantenedor** (a etapa não fecha sem elas): criar o environment `release` com a
+**Pendências do mantenedor** (a etapa não fecha sem elas): um ruleset de tag que restrinja a
+criação de `v*` (o GitHub roda o `release.yml` do commit da tag, e um commit anterior a esta etapa
+não tem `environment:`; achado do Grok, abaixo); criar o environment `release` com a
 configuração acima e conferir com `gh api repos/aquental/ripwire-broker/environments/release`;
 no próximo release real, ver `gates` concluído e `draft` em `waiting` até a aprovação; abrir uma
 PR que troque um hash e ver o `default` falhar.
@@ -9372,4 +9374,21 @@ Recusados, com o motivo: um `if:` no job `gates`, porque pular os portões tamb�
 o `build` e o `publish` pelo `needs`, e `continue-on-error` não é aceito num job que chama
 workflow reutilizável; e um `contents: write` no nível do workflow, porque o `rust.yml` chamado
 declara `contents: read` e os jobs que escrevem declaram as próprias permissões.
+
+**Grok** (1.0.77, cerca de 35 min, sobre o `1c01f03`). Oito achados, todos válidos e nenhum alto.
+Seis já estavam corrigidos pela rodada acima, porque Codex e Antigravity tinham achado o mesmo:
+renomeação, passo exato, README e handoff, rede no plano, `sort`, e a maior parte do teste do
+release. Dois eram novos:
+
+- **o teste do release ainda aceitava um `needs: draft` falso.** Tirado o `needs` do `build` e
+  posto o mesmo texto dentro de um script, ele passava, porque comparava linhas sem indentação.
+  Passava também um `permissions: write-all` no `gates` (o `rust.yml` chamado o limita a
+  `contents: read`, mas o teste dizia proibir). Agora o `needs:` tem de ser a chave do próprio job,
+  na indentação dele, e o `gates` não pode pedir permissão nenhuma. Três mutantes, mortos;
+- **uma tag `v*` num commit anterior publica sem aprovação.** O GitHub roda o `release.yml` do
+  commit da tag, e o `master` atual não tem `environment:`. Não há ruleset de tag. Isso é
+  configuração do GitHub: entrou nas pendências do mantenedor, aqui e no plano.
+
+Um terceiro, o push direto ao `master`, que pula o passo de PR, é risco conhecido: o `master` exige
+os checks, e a revisão obrigatória fica em aberto no plano até haver um segundo mantenedor.
 

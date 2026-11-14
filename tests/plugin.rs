@@ -849,15 +849,20 @@ fn the_release_waits_for_a_human_before_its_first_write() {
             "{job} holds an environment"
         );
     }
-    let has = |job: &str, line: &str| job_code(&yml, job).iter().any(|l| l.trim() == line);
-    assert!(has("draft", "needs: gates"));
-    assert!(has("build", "needs: draft"));
-    assert!(has("publish", "needs: build"));
+    // The job's own `needs:` key, at its indentation: the same text inside a script is not one.
+    let needs = |job: &str, on: &str| {
+        job_code(&yml, job)
+            .iter()
+            .any(|l| *l == format!("    needs: {on}"))
+    };
+    assert!(needs("draft", "gates"));
+    assert!(needs("build", "draft"));
+    assert!(needs("publish", "build"));
     assert!(
         !job_code(&yml, "gates")
             .iter()
-            .any(|l| l.contains("contents: write")),
-        "the gates run before the approval and must not write"
+            .any(|l| l.contains("write") || l.contains("permissions:")),
+        "the gates run before the approval and must not ask for any permission"
     );
     // Nothing skips a step or turns its failure into a pass.
     for job in ["gates", "draft", "build", "publish"] {

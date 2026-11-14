@@ -227,6 +227,9 @@ barra um agente que decida, ou seja induzido a, aprovar e publicar.
   - bypass de administradores **desligado**.
   Com o login do mantenedor ao alcance do agente (etapa 4), essa aprovação é um segundo passo
   deliberado, não uma garantia de presença humana.
+- [ ] Mantenedor: um ruleset de tag que restrinja a criação de tags `v*` (D-197). O environment
+  só protege o `release.yml` que o declara: uma tag `v*` empurrada num commit anterior a esta
+  etapa roda o workflow daquele commit, sem `environment:`, e publica sem aprovação.
 - [x] `release.yml`: `environment: release` no job `draft`, o primeiro com `contents: write`.
   O job `gates` (que chama o `rust.yml` e compila para rodar clippy e os testes) continua
   antes, sem aprovação. A aprovação antecede a criação do rascunho, a compilação dos artefatos
