@@ -24,6 +24,10 @@ jobs:
   draft:
     name: draft
     needs: gates
+    # A human approves before anything is written: the draft, the build of what users download,
+    # the publication (ai-native plan, step 5; D-197). The environment's rules (required reviewer,
+    # tags v* only) are set on GitHub by the maintainer; until then GitHub creates it unprotected.
+    environment: release
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

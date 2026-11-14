@@ -132,6 +132,7 @@
 | 2026-11-14 13:40 | Etapa 6 do plano AI-native, em TDD: `scripts/check.sh [all\|default\|online\|plugin]` passa a ser a fonte dos passos do CI; os jobs `default`, `online` e `plugin` só o chamam, com os nomes intactos. `all` recusa começar se faltar `cargo-nextest`, `npx` ou `ripwire`; um alvo isolado termina com "partial coverage". Achado no caminho: as guardas por `grep` passavam quando o próprio `grep` falhava; agora falham fechado. O `claude` fixado (2.1.292) mora no script e roda pelo `npx`, com o postinstall liberado para o npm 12 | [D-194](#d-194--um-comando-roda-tudo-o-que-o-ci-roda-numa-pr) |
 | 2026-11-14 15:30 | Etapas 1, 2 e 4 do plano AI-native, em TDD: `AGENTS.md` na raiz (4,8 KB, em inglês) roteia o agente para o handoff, o changelog, o PRD e o `scripts/check.sh`; traz as cinco regras mais caras, a lista "Ask before" (seis efeitos, cada um com motivo e exemplos) e a seção "Credentials" do D-192. `CLAUDE.md` só importa o `AGENTS.md`. O `handoff.md` passa a um estado único, até este D; o README marca `memory forget --all` como irreversível. `tests/agents_md.rs` confere tamanho, caminhos, seções, comandos e categorias | [D-195](#d-195--o-agentsmd-roteia-o-agente-e-diz-o-que-pede-um-humano) |
 | 2026-11-14 16:00 | Etapa 3 do plano AI-native, parte de código, em TDD: job `secrets` no `rust.yml` (não obrigatório) com o gitleaks 8.30.1 fixado por versão e SHA-256, `fetch-depth: 0`; `scripts/check.sh secrets`, incluído no `all`, com as resoluções de merge (`--diff-merges=remerge`), recusando clone raso e falhando quando o gitleaks loga erro ou não varre nenhum commit (ele sai 0 nesses casos); a única exceção é uma impressão digital no `.gitleaksignore` (o stub de cabeçalho de chave de `tests/props_fs.rs`), porque a allowlist por regex da primeira versão escondia uma chave real ao lado do stub. O histórico inteiro passou; amostras sintéticas numa cópia local falharam o alvo, também depois de apagadas da árvore e quando só um merge as trazia. Ligar o secret scanning e o push protection fica com o mantenedor | [D-196](#d-196--o-gitleaks-varre-o-histórico-inteiro-em-toda-pr) |
+| 2026-11-14 18:00 | Etapa 5 do plano AI-native, parte de código, em TDD: o job `draft` do `release.yml` declara `environment: release`, então a aprovação vem depois dos portões e antes do rascunho, da compilação e da publicação; numa PR, o passo "Plugin surface" do job `default` (`scripts/plugin-surface.sh`) escreve um aviso no resumo quando a PR toca `integrations/claude-code/` ou `.claude-plugin/` e, quando o `checksums.txt` muda, exige as mesmas linhas do `SHA256SUMS` do release publicado da primeira linha. Conferido contra o release `v0.1.0` real. Criar e configurar o environment fica com o mantenedor | [D-197](#d-197--um-humano-aprova-antes-de-o-release-escrever-qualquer-coisa) |
 | 2026-10-11 15:20 | Etapa 3 da T5.3 (Codex 0.161.0, `gpt-6.1-sol`): rodada de 60 sessões **inconclusiva**. 16 sessões morreram no limite de uso da conta e 9 foram invalidadas pelo guarda de contaminação; sobraram 35 válidas e 4 pares com histórico relevante (tokens B/A 0,94, IC 0,65 a 1,04). Dois achados do instrumento: o guarda marca `cat ~/.agents/skills/ripwire-*/SKILL.md` e `command -v graft` como ferramenta de contexto, e o Codex lê as skills do usuário mesmo com `--ignore-user-config` | [D-187](#d-187--etapa-3-da-t53-a-rodada-do-codex-parou-no-limite-de-uso) |
 | 2026-10-11 14:10 | Etapa 2 da T5.3: rodada completa no `ceci_app`, 13 sequências (30 sessões), braços A, B e C, 3 repetições, 270 sessões, US$ 94,24. Acerto na última sessão: A 34/37, B 37/37, C 32/34. Tokens com histórico relevante, mediana contra A: B 0,99 (IC 0,87 a 1,07), C 0,89 (IC 0,82 a 1,02). O braço B entregou a memória em 21 de 43 leituras (17 recusadas pelo classificador, 5 obsoletas); com entrega, 0,92. Latência de `context_for_task` sem piora. Cache quente: a leitura de memória não tem cache (B/A 6,9 na chamada repetida). Uma nota com muitas fontes passa da parte da memória e é cortada. **`--memory` não é promovido** | [D-186](#d-186--etapa-2-da-t53-o-braço-b-não-passa-no-gate-de-custo-o-classificador-recusa-metade-das-leituras) |
 | 2026-10-11 10:30 | O `ripwire-eval` passa a medir o Codex, em TDD: lê o transcript de `codex exec --json` com as mesmas contagens e os mesmos motivos de invalidez, e entrega o braço na linha de comando (`{codex_mcp}` vira os `-c mcp_servers.…` do braço). O registro de cada sessão ganha `memory_stop_reasons`, o `stop_reason` de cada leitura de memória | [D-185](#d-185--o-ripwire-eval-mede-o-codex-e-leva-o-stop_reason-da-leitura-ao-registro) |
@@ -9277,4 +9278,59 @@ válidos e conferidos no código, tratados em TDD:
   Tirar as aspas do `--log-opts` ou o `NO_COLOR=1` faz os testes falharem;
 - o teste das impressões digitais aceitava um `#` vazio como motivo e campos vazios;
 - a lista de ferramentas do `all` não citava o `git` (`AGENTS.md`, README, handoff, este D).
+
+## D-197 — Um humano aprova antes de o release escrever qualquer coisa
+
+**Etapa 5 do [plano AI-native](plan/ai-native-plan.md), a parte que não é do mantenedor,** na
+branch `ai-native/5-release-gate`, empilhada sobre a da etapa 3.
+
+**O environment `release`.** O job `draft`, o primeiro com `contents: write`, declara
+`environment: release`. A ordem fica gates → (aprovação) → draft → build → publish: os portões do
+`rust.yml` rodam sem esperar, e nada é escrito (rascunho, compilação do que o usuário baixa,
+publicação) antes da aprovação. Enquanto o mantenedor não criar o environment com as regras do
+plano (revisor obrigatório: ele; "prevent self-review" desligado, porque ele é o único revisor;
+bypass de administradores desligado; só tags `v*`), o GitHub o cria sozinho na primeira execução,
+**sem proteção**. O portão só existe depois dessa configuração. `tests/plugin.rs` exige o
+`environment: release` no `draft` e em nenhum outro job, as dependências em cadeia, nenhum
+`contents: write` nos portões e nenhum `if:` ou `continue-on-error` nos jobs que escrevem.
+
+**O passo "Plugin surface" (`scripts/plugin-surface.sh`).** Roda só em `pull_request`, no job
+`default`, depois dos checks. Compara a árvore da PR com o commit sobre o qual o merge dela foi
+montado (`github.event.pull_request.base.sha`, buscado sozinho porque o checkout tem um commit só;
+a ponta do `master` poderia ter andado):
+
+- quando a PR toca `integrations/claude-code/` ou `.claude-plugin/`, escreve um `::warning::` e
+  uma seção no resumo do job, com a lista dos arquivos. Isso só informa, nunca bloqueia;
+- quando o `checksums.txt` muda, exige que a primeira linha seja uma tag `vX.Y.Z`, que o release
+  exista e não seja rascunho, e que as demais linhas sejam exatamente as do `SHA256SUMS` dele (em
+  qualquer ordem). Qualquer diferença falha o `default` e lista o que só há de um lado. Um
+  `git diff` que falha, um download que falha e um `SHA256SUMS` vazio também falham.
+
+O plano pedia a conferência "num passo do YAML e fora do `check.sh`". Ela ficou fora do
+`check.sh`, porque depende do diff da PR e da rede (D-193), mas mora num script chamado pelo
+passo, para que os testes a dirijam com `git` e `gh` falsos (`tests/plugin_surface.rs`, nos dois
+bash da máquina).
+
+**Conferido contra o release real `v0.1.0`**, num clone descartável e com o `gh` só lendo:
+
+| Caso | Resultado |
+| --- | --- |
+| mesmas linhas, em outra ordem | passa |
+| um hash trocado | falha e mostra a linha |
+| tag sem release (`v0.0.9`) | falha |
+| só `register.ts` mudou | aviso no resumo, sem conferência |
+
+**Mutantes.** Treze, todos mortos. Dois sobreviveram à primeira versão dos testes e mostraram
+lacunas, agora cobertas: um release inexistente caía na mensagem de rascunho; e um `checksums.txt`
+só com a linha da tag, comparado com um `SHA256SUMS` vazio, passava.
+
+**Edição em `integrations/claude-code/`.** O README do plugin ganhou, em "Publishing a version", a
+aprovação e o passo da PR. A lista "Ask before" do `AGENTS.md` cobre qualquer edição nesse
+diretório. Esta foi feita porque a etapa 5, que o usuário mandou executar, a pede por nome, e o
+arquivo é documentação, não algo que o usuário executa.
+
+**Pendências do mantenedor** (a etapa não fecha sem elas): criar o environment `release` com a
+configuração acima e conferir com `gh api repos/aquental/ripwire-broker/environments/release`;
+no próximo release real, ver `gates` concluído e `draft` em `waiting` até a aprovação; abrir uma
+PR que troque um hash e ver o `default` falhar.
 

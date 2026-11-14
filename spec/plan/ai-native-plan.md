@@ -3,7 +3,7 @@
 Data: **2026-11-14**. Base: `master`, HEAD `d9aa86e`.
 Origem: [`docs/AINE-REPORT.md`](../../docs/AINE-REPORT.md) (26 aprovados, 20 reprovados, 0 não
 aplicáveis).
-Status: **em execução** (etapa 6 feita, D-194; etapas 1, 2 e 4, D-195; etapa 3 sem a parte do mantenedor, D-196). Revisado pelo Codex em 2026-11-14: 14 achados, todos
+Status: **em execução** (etapa 6 feita, D-194; etapas 1, 2 e 4, D-195; etapa 3 sem a parte do mantenedor, D-196; etapa 5 sem a parte do mantenedor, D-197). Revisado pelo Codex em 2026-11-14: 14 achados, todos
 conferidos no código e incorporados (ver [Revisão adversarial](#revisão-adversarial)).
 Decisão: [D-189](../changelog.md#d-189--plano-de-prontidão-para-agentes-revisado-pelo-codex).
 Conferido contra a árvore antes da execução em 2026-11-14
@@ -226,23 +226,23 @@ barra um agente que decida, ou seja induzido a, aprovar e publicar.
   - bypass de administradores **desligado**.
   Com o login do mantenedor ao alcance do agente (etapa 4), essa aprovação é um segundo passo
   deliberado, não uma garantia de presença humana.
-- [ ] `release.yml`: `environment: release` no job `draft`, o primeiro com `contents: write`.
+- [x] `release.yml`: `environment: release` no job `draft`, o primeiro com `contents: write`.
   O job `gates` (que chama o `rust.yml` e compila para rodar clippy e os testes) continua
   antes, sem aprovação. A aprovação antecede a criação do rascunho, a compilação dos artefatos
   distribuídos e a publicação. Manter a ordem gates → draft → build → publish.
-- [ ] `tests/plugin.rs` lê o `release.yml`
+- [x] `tests/plugin.rs` lê o `release.yml`
   (`the_release_workflow_publishes_what_install_binary_downloads`): rodar e ajustar se a chave
   nova quebrar a leitura; acrescentar uma asserção de que o job `draft` declara
   `environment: release`, para o portão não sumir numa edição.
-- [ ] Verificação do `integrations/claude-code/scripts/checksums.txt` por máquina, num passo do
+- [x] Verificação do `integrations/claude-code/scripts/checksums.txt` por máquina, num passo do
   YAML e fora do `check.sh` (depende do diff da PR e da rede; D-193), como defesa adicional e não como substituta
   da revisão: um passo no job `default` que, quando o arquivo muda, baixa o `SHA256SUMS` do
   release da tag da primeira linha e compara linha a linha. Um hash que não veio de um release
   publicado falha.
-- [ ] Um passo que escreve um aviso no resumo do job quando a PR toca `integrations/claude-code/`
+- [x] Um passo que escreve um aviso no resumo do job quando a PR toca `integrations/claude-code/`
   ou `.claude-plugin/`: "esta PR muda o que os usuários do plugin executam". Informativo, não
   bloqueia.
-- [ ] Documentar o portão em "Publishing a version" no README do plugin.
+- [x] Documentar o portão em "Publishing a version" no README do plugin.
 
 **Aceitação:**
 

@@ -63,6 +63,18 @@ jobs:
       - name: Checks
         timeout-minutes: 12
         run: scripts/check.sh default
+      # A PR that changes what the plugin's users run says so in the job summary, and pinned hashes
+      # must match the published release they name (ai-native plan, step 5; D-197). Needs the
+      # PR's diff and the network, so it is not in check.sh. The base is the commit the PR's merge
+      # was built on, fetched alone: the checkout is one commit deep.
+      - name: Plugin surface
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          scripts/plugin-surface.sh FETCH_HEAD
 
   online:
     name: online

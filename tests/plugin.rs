@@ -824,3 +824,57 @@ fn the_release_workflow_publishes_what_install_binary_downloads() {
     assert!(yml.contains("uses: ./.github/workflows/rust.yml"));
     assert!(yml.contains("--draft") && yml.contains("--draft=false"));
 }
+
+/// A job's own non-comment lines, from `  <job>:` to the next job.
+fn release_job(yml: &str, job: &str) -> Vec<String> {
+    let header = format!("  {job}:");
+    let is_job_start =
+        |l: &str| l.starts_with("  ") && !l.starts_with("   ") && !l[2..].starts_with('#');
+    yml.lines()
+        .skip_while(|l| *l != header)
+        .enumerate()
+        .take_while(|(i, l)| *i == 0 || !is_job_start(l))
+        .map(|(_, l)| l.split(" #").next().unwrap_or("").trim_end().to_owned())
+        .filter(|l| !l.trim_start().starts_with('#') && !l.trim().is_empty())
+        .collect()
+}
+
+#[test]
+fn the_release_waits_for_a_human_before_its_first_write() {
+    // ai-native plan, step 5: the `release` environment's approval comes after the gates and
+    // before the draft, the build of what users download, and the publication.
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(".github/workflows/release.yml");
+    let yml = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+    let has = |job: &str, line: &str| release_job(&yml, job).iter().any(|l| l.trim() == line);
+    assert!(
+        has("draft", "environment: release"),
+        "{:#?}",
+        release_job(&yml, "draft")
+    );
+    for job in ["gates", "build", "publish"] {
+        assert!(
+            !release_job(&yml, job)
+                .iter()
+                .any(|l| l.trim_start().starts_with("environment:")),
+            "{job} must not hold its own approval"
+        );
+    }
+    // gates → draft → build → publish, nothing that writes before the approval.
+    assert!(has("draft", "needs: gates"));
+    assert!(has("build", "needs: draft"));
+    assert!(has("publish", "needs: build"));
+    assert!(
+        !release_job(&yml, "gates")
+            .iter()
+            .any(|l| l.contains("contents: write")),
+        "the gates run before the approval and must not write"
+    );
+    for job in ["draft", "build", "publish"] {
+        assert!(
+            !release_job(&yml, job)
+                .iter()
+                .any(|l| l.contains("continue-on-error") || l.trim_start().starts_with("if:")),
+            "{job} can be skipped or its failure ignored"
+        );
+    }
+}
