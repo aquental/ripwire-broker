@@ -113,7 +113,7 @@ jobs:
         run: scripts/check.sh plugin
 
   # Secrets anywhere in the history (ai-native plan, step 3). Not a required check: it becomes one
-  # by a decision after two weeks without a false positive. The allowlist is .gitleaks.toml.
+  # by a decision after two weeks without a false positive. Exceptions: .gitleaksignore.
   secrets:
     name: secrets
     runs-on: ubuntu-latest

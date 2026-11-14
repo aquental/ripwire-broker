@@ -63,8 +63,9 @@ cargo lint                  # o clippy do job default (alias em .cargo/config.to
   `scripts/check.sh` com o alvo de mesmo nome; os passos moram no script. `default` e `online` são
   obrigatórios no `master`; `plugin` e `secrets` não (o `secrets` vira obrigatório por decisão,
   depois de duas semanas sem falso positivo, D-196). O `secrets` roda o gitleaks fixado (versão e
-  SHA-256 no job) sobre o histórico inteiro; a allowlist, com o motivo de cada entrada, é o
-  `.gitleaks.toml`. Nos jobs `default` e `online`, o CI instala o
+  SHA-256 no job) sobre o histórico inteiro, resoluções de merge incluídas; as exceções são
+  impressões digitais no `.gitleaksignore`, cada uma com o motivo (D-196). O alvo recusa um clone
+  raso e falha quando o gitleaks loga erro ou não varre nenhum commit. Nos jobs `default` e `online`, o CI instala o
   `ripwire` (última release, D-188) e o nextest antes de chamar o script.
 - **Release** (`.github/workflows/release.yml`, D-160): só numa tag `v*` igual à versão do
   `Cargo.toml`. Chama o `rust.yml`, compila os quatro alvos e publica tarballs e `SHA256SUMS`. A

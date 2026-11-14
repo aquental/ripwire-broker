@@ -31,7 +31,7 @@ a new flag with the same effect is covered.
   it is irreversible and also revokes collection.
 - **Touching the gates:** renaming jobs or editing check steps in `.github/workflows/rust.yml`,
   editing what `scripts/check.sh` or `.cargo/config.toml` runs, branch protection, rulesets,
-  environments, `deny.toml`, the gitleaks allowlist (plan step 3), because each one can turn a
+  environments, `deny.toml`, `.gitleaks.toml` and `.gitleaksignore`, because each one can turn a
   required check green without checking anything.
 
 ## Credentials

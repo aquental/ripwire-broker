@@ -118,7 +118,7 @@ coberta.
   - **escrever fora do repositório**: `install … --write` fora de um diretório temporário;
   - **apagar estado real**: `memory forget --all` em um state dir que não seja de teste;
   - **mexer nos portões**: renomear jobs do `rust.yml`, proteção de branch, rulesets,
-    environments, a allowlist do gitleaks, o `deny.toml`.
+    environments, as exceções do gitleaks (`.gitleaks.toml`, `.gitleaksignore`), o `deny.toml`.
 - [x] No `README.md`, marcar `memory forget --all` como irreversível.
 
 **Aceitação:** as seis categorias existem, cada uma com o motivo e os exemplos; a lista está na
@@ -135,8 +135,11 @@ configuração do repositório.
 - [x] Novo job `secrets` no `rust.yml`, em `pull_request` e `push` ao `master`, **não
   obrigatório** no início: baixa o binário do gitleaks de uma release fixada, confere o SHA-256
   (mesmo padrão do passo do ripwire, sem action de terceiros) e roda
-  `gitleaks detect --redact` sobre o histórico (checkout com `fetch-depth: 0`).
-- [x] `.gitleaks.toml` com allowlist por caminho e linha para os stubs sintéticos conhecidos
+  `gitleaks git --redact` sobre o histórico (checkout com `fetch-depth: 0`). Feito com as
+  resoluções de merge (`--diff-merges=remerge`) e recusando clone raso (D-196).
+- [x] ~~`.gitleaks.toml` com allowlist por caminho e linha~~ Feito como impressões digitais no
+  `.gitleaksignore` (commit, arquivo, regra e linha), porque a allowlist por caminho e linha
+  escondia uma chave real ao lado do stub (D-196). Era: allowlist para os stubs sintéticos conhecidos
   (`tests/online_units.rs`, `tests/props_fs.rs`: cabeçalhos `BEGIN … PRIVATE KEY` escritos em
   tempdir para testar o leitor), cada entrada com o motivo.
 - [x] Rodar o gitleaks localmente sobre o histórico inteiro antes de abrir a PR e tratar o que

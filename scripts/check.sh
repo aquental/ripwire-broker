@@ -49,6 +49,7 @@ for target in "${selected[@]}"; do
             ;;
         secrets)
             need gitleaks "brew install gitleaks, or the release pinned in .github/workflows/rust.yml"
+            need git "install git"
             ;;
     esac
 done
@@ -169,10 +170,37 @@ run_plugin() (
 )
 
 # The whole history, not the tree: a secret committed and then deleted is still published.
-# The allowlist and its reasons are in .gitleaks.toml. --redact keeps a found secret out of the log.
+# remerge adds what a merge itself changed (a conflict resolution), which `git log -p` leaves out.
+# The exceptions are fingerprints in .gitleaksignore, each with its reason. --redact keeps a found
+# secret out of the log.
+scan_history() {
+    local log status=0
+    if [ "$(git rev-parse --is-inside-work-tree 2> /dev/null)" != true ]; then
+        echo "::error::not a git work tree: gitleaks would scan nothing and pass" >&2
+        return 1
+    fi
+    if [ "$(git rev-parse --is-shallow-repository)" != false ]; then
+        echo "::error::a shallow clone holds part of the history; run git fetch --unshallow" >&2
+        return 1
+    fi
+    log=$(NO_COLOR=1 gitleaks git --redact --verbose --no-banner --config .gitleaks.toml \
+        --gitleaks-ignore-path .gitleaksignore \
+        --log-opts="--all --full-history --diff-merges=remerge" . 2>&1) || status=$?
+    printf '%s\n' "$log"
+    [ "$status" -eq 0 ] || return "$status"
+    # gitleaks 8.30 exits 0 when git writes anything to stderr, having scanned nothing.
+    if grep -Eq ' (ERR|FTL) ' <<< "$log"; then
+        echo "::error::gitleaks logged an error above, so the scan proved nothing" >&2
+        return 1
+    fi
+    if ! grep -Eq ' INF [1-9][0-9]* commits scanned' <<< "$log"; then
+        echo "::error::gitleaks scanned no commit, so the scan proved nothing" >&2
+        return 1
+    fi
+}
+
 run_secrets() {
-    step "Secrets in the history (gitleaks)" \
-        gitleaks git --redact --verbose --no-banner --config .gitleaks.toml .
+    step "Secrets in the history (gitleaks)" scan_history
 }
 
 for target in "${selected[@]}"; do

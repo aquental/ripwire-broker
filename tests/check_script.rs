@@ -14,7 +14,14 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 const SCRIPT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/scripts/check.sh");
-const ALL_TOOLS: &[&str] = &["cargo", "cargo-nextest", "npx", "ripwire", "gitleaks"];
+const ALL_TOOLS: &[&str] = &[
+    "cargo",
+    "cargo-nextest",
+    "npx",
+    "ripwire",
+    "gitleaks",
+    "git",
+];
 
 /// A sealed directory of tools (the fakes asked for plus the few host utilities the script uses)
 /// and a tree holding a copy of the script and a clean `tests/fixtures/`.
@@ -120,7 +127,9 @@ impl Sandbox {
 }
 
 /// Records `name args` (and `PROPTEST_CASES` and npm's `allow-scripts` when set) and exits 0,
-/// unless `FAKE_FAIL` is a substring of the call. `cargo tree` prints `FAKE_TREE`.
+/// unless `FAKE_FAIL` is a substring of the call. `cargo tree` prints `FAKE_TREE`; `git
+/// rev-parse` answers `FAKE_INSIDE` and `FAKE_SHALLOW`; `gitleaks` logs `FAKE_GITLEAKS_LOG` to
+/// stderr, as the real one does (default: a clean scan of three commits).
 const FAKE: &str = r#"#!/bin/bash
 call="${0##*/} $*"
 printf '%s%s%s\n' "$call" "${PROPTEST_CASES:+ [PROPTEST_CASES=$PROPTEST_CASES]}" \
@@ -129,9 +138,14 @@ if [ -n "${FAKE_FAIL:-}" ] && [[ "$call" == *"$FAKE_FAIL"* ]]; then
     echo "fake failure in: $call" >&2
     exit 1
 fi
-if [ "$call" = "cargo tree --locked -e normal" ]; then
-    printf '%s\n' "${FAKE_TREE:-ripwire-broker v0.1.0}"
-fi
+case "$call" in
+    "cargo tree --locked -e normal") printf '%s\n' "${FAKE_TREE:-ripwire-broker v0.1.0}" ;;
+    "git rev-parse --is-inside-work-tree") echo "${FAKE_INSIDE:-true}" ;;
+    "git rev-parse --is-shallow-repository") echo "${FAKE_SHALLOW:-false}" ;;
+    "gitleaks git "*)
+        printf '%b\n' "${FAKE_GITLEAKS_LOG:-5:24PM INF 3 commits scanned.\n5:24PM INF no leaks found}" >&2
+        ;;
+esac
 exit 0
 "#;
 
@@ -205,8 +219,14 @@ const PLUGIN_CALLS: &[&str] = &[
     "npx -y @anthropic-ai/claude-code@2.1.292 plugin test integrations/claude-code [allow-scripts=@anthropic-ai/claude-code]",
 ];
 
-const SECRETS_CALLS: &[&str] =
-    &["gitleaks git --redact --verbose --no-banner --config .gitleaks.toml ."];
+const SECRETS_CALLS: &[&str] = &[
+    "git rev-parse --is-inside-work-tree",
+    "git rev-parse --is-shallow-repository",
+    // remerge: a merge's own changes (a conflict resolution, a file only the merge adds) are part
+    // of the history too, and plain `git log -p` shows no diff for a merge.
+    "gitleaks git --redact --verbose --no-banner --config .gitleaks.toml \
+     --gitleaks-ignore-path .gitleaksignore --log-opts=--all --full-history --diff-merges=remerge .",
+];
 
 fn every_call() -> Vec<&'static str> {
     [DEFAULT_CALLS, ONLINE_CALLS, PLUGIN_CALLS, SECRETS_CALLS].concat()
@@ -340,6 +360,7 @@ fn all_fails_up_front_naming_what_to_install_when_a_tool_is_missing() {
         ("npx", "Node.js"),
         ("cargo", "rustup"),
         ("gitleaks", "brew install gitleaks"),
+        ("git", "install git"),
     ] {
         let run = Sandbox::without(tool).run(&["all"]);
         assert!(!run.ok(), "{tool}");
@@ -365,7 +386,7 @@ fn default_passes_without_npx_and_says_coverage_is_partial() {
 
 #[test]
 fn secrets_needs_only_gitleaks_and_no_ripwire() {
-    let run = Sandbox::with(&["gitleaks"]).run(&["secrets"]);
+    let run = Sandbox::with(&["gitleaks", "git"]).run(&["secrets"]);
     assert!(run.ok(), "{}", run.both());
     assert_eq!(run.calls(), SECRETS_CALLS);
     assert!(!run.stderr.contains("ripwire"), "{}", run.stderr);
@@ -377,13 +398,66 @@ fn secrets_needs_only_gitleaks_and_no_ripwire() {
 
 #[test]
 fn a_failing_plugin_check_stops_the_run_before_the_next_target() {
-    // run_plugin is a subshell (its npm setting stays inside); its failure must still stop `all`.
-    let run = Sandbox::all()
-        .env("FAKE_FAIL", "validate --strict .")
-        .run(&["all"]);
+    // run_plugin is a subshell (its npm setting stays inside); a failure in any of its steps must
+    // still stop `all`.
+    for (failing, call) in [
+        ("validate --strict integrations", PLUGIN_CALLS[0]),
+        ("validate --strict .", PLUGIN_CALLS[1]),
+        ("plugin test", PLUGIN_CALLS[2]),
+    ] {
+        let run = Sandbox::all().env("FAKE_FAIL", failing).run(&["all"]);
+        assert!(!run.ok(), "{failing}: {}", run.both());
+        assert_eq!(run.calls().last().copied(), Some(call), "{failing}");
+        assert!(!run.stdout.contains("passed"), "{failing}: {}", run.stdout);
+    }
+}
+
+#[test]
+fn secrets_refuses_outside_a_git_work_tree() {
+    // gitleaks 8.30 logs `not a git repository` and exits 0 there.
+    let run = Sandbox::all().env("FAKE_INSIDE", "false").run(&["secrets"]);
     assert!(!run.ok(), "{}", run.both());
-    assert_eq!(run.calls().last().copied(), Some(PLUGIN_CALLS[1]));
-    assert!(!run.stdout.contains("passed"), "{}", run.stdout);
+    assert!(run.both().contains("not a git work tree"), "{}", run.both());
+    assert!(!run.calls.contains("gitleaks"), "{}", run.calls);
+}
+
+#[test]
+fn secrets_refuses_a_shallow_clone() {
+    // A shallow clone holds part of the history: a secret added and removed before it would pass.
+    let run = Sandbox::all().env("FAKE_SHALLOW", "true").run(&["secrets"]);
+    assert!(!run.ok(), "{}", run.both());
+    assert!(
+        run.both().contains("git fetch --unshallow"),
+        "{}",
+        run.both()
+    );
+    assert!(!run.calls.contains("gitleaks"), "{}", run.calls);
+}
+
+#[test]
+fn gitleaks_logging_an_error_fails_even_when_it_exits_zero() {
+    // What gitleaks 8.30.1 prints, exit 0, when git writes anything to stderr.
+    let log = "5:24PM ERR [git] warning: synthetic\n5:24PM ERR error=\"stderr is not empty\"\n\
+               5:24PM INF 373 commits scanned.\n5:24PM INF no leaks found";
+    let run = Sandbox::all()
+        .env("FAKE_GITLEAKS_LOG", log)
+        .run(&["secrets"]);
+    assert!(!run.ok(), "{}", run.both());
+    assert!(
+        run.both().contains("::error::gitleaks logged an error"),
+        "{}",
+        run.both()
+    );
+}
+
+#[test]
+fn gitleaks_scanning_no_commit_fails() {
+    let log = "5:24PM INF 0 commits scanned.\n5:24PM INF no leaks found";
+    let run = Sandbox::all()
+        .env("FAKE_GITLEAKS_LOG", log)
+        .run(&["secrets"]);
+    assert!(!run.ok(), "{}", run.both());
+    assert!(run.both().contains("scanned no commit"), "{}", run.both());
 }
 
 #[test]
@@ -392,7 +466,7 @@ fn a_leak_found_by_gitleaks_fails_the_run() {
         .env("FAKE_FAIL", "gitleaks git")
         .run(&["all"]);
     assert!(!run.ok(), "{}", run.both());
-    assert_eq!(run.calls().last().copied(), Some(SECRETS_CALLS[0]));
+    assert_eq!(run.calls().last().copied(), Some(SECRETS_CALLS[2]));
     assert!(!run.stdout.contains("passed"), "{}", run.stdout);
 }
 
@@ -494,33 +568,126 @@ fn ci_jobs_call_the_script_under_their_required_names() {
     }
 }
 
+/// A job's lines without comments: a property written in a comment is not a property.
+fn code_lines(block: &[String]) -> Vec<String> {
+    block
+        .iter()
+        .map(|l| match l.find(" #") {
+            Some(i) if !l[..i].contains('"') => l[..i].trim_end().to_string(),
+            _ => l.trim_end().to_string(),
+        })
+        .filter(|l| !l.trim_start().starts_with('#') && !l.trim().is_empty())
+        .collect()
+}
+
 #[test]
 fn the_secrets_job_scans_the_whole_history_with_a_pinned_gitleaks() {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(".github/workflows/rust.yml");
     let yml = fs::read_to_string(&path).expect("rust.yml");
-    let block = job_block(&yml, "secrets").join("\n");
+    let lines = code_lines(&job_block(&yml, "secrets"));
+    let block = lines.join("\n");
+    let has = |exact: &str| lines.iter().any(|l| l.trim() == exact);
+    let first = |needle: &str| {
+        lines
+            .iter()
+            .position(|l| l.contains(needle))
+            .unwrap_or_else(|| panic!("no `{needle}` in the job:\n{block}"))
+    };
     // A shallow checkout scans one commit: a secret added and removed earlier would pass.
-    assert!(block.contains("fetch-depth: 0"), "{block}");
-    assert!(block.contains("persist-credentials: false"), "{block}");
-    // A fixed release, its hash written here, checked before anything runs; no third-party action.
-    let version = block
-        .lines()
+    assert!(has("fetch-depth: 0"), "{block}");
+    assert!(has("persist-credentials: false"), "{block}");
+    // Nothing turns the job off or its failure into a pass.
+    for escape in ["if:", "continue-on-error", "|| true"] {
+        assert!(!block.contains(escape), "`{escape}` in the job:\n{block}");
+    }
+    // The only action is the pinned checkout; gitleaks comes from its release, not an action.
+    let uses: Vec<&String> = lines.iter().filter(|l| l.contains("uses:")).collect();
+    assert_eq!(uses.len(), 1, "{uses:?}");
+    let pin = uses[0].split('@').nth(1).unwrap_or_default();
+    assert!(
+        uses[0].contains("actions/checkout@") && pin.len() == 40,
+        "{uses:?}"
+    );
+    // A fixed release.
+    let version = lines
+        .iter()
         .find_map(|l| l.trim().strip_prefix("GITLEAKS_VERSION: "))
         .expect("GITLEAKS_VERSION pinned in the job");
     assert!(
         version.split('.').all(|n| n.parse::<u32>().is_ok()) && version.split('.').count() == 3,
         "not an exact version: {version}"
     );
-    let sha = block
-        .lines()
+    let sha = lines
+        .iter()
         .find_map(|l| l.trim().strip_prefix("GITLEAKS_SHA256: "))
         .expect("GITLEAKS_SHA256 pinned in the job");
     assert!(
         sha.len() == 64 && sha.chars().all(|c| c.is_ascii_hexdigit()),
         "{sha}"
     );
-    assert!(block.contains("sha256sum -c"), "{block}");
-    assert!(!block.contains("uses: gitleaks/"), "{block}");
+    assert!(
+        block.contains(r#"gh release download "v$GITLEAKS_VERSION""#),
+        "{block}"
+    );
+    // Its hash is checked against the pinned one before it is unpacked, installed or run.
+    let check = first("sha256sum -c");
+    assert!(
+        lines[check].contains(r#"echo "$GITLEAKS_SHA256  $tarball" | sha256sum -c"#),
+        "{}",
+        lines[check]
+    );
+    for later in [
+        "tar ",
+        "install ",
+        "gitleaks\" version",
+        "scripts/check.sh secrets",
+    ] {
+        assert!(
+            check < first(later),
+            "`{later}` comes before the hash check:\n{block}"
+        );
+    }
+}
+
+#[test]
+fn the_gitleaks_exceptions_are_pinned_fingerprints_each_with_a_reason() {
+    // A regex or path allowlist hides whatever else matches it; a fingerprint names one finding
+    // (commit, file, rule, line), so a new secret anywhere is still found.
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let config = fs::read_to_string(root.join(".gitleaks.toml")).expect(".gitleaks.toml");
+    let settings: Vec<&str> = config
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .collect();
+    assert_eq!(settings, ["[extend]", "useDefault = true"], "{config}");
+    let ignore = fs::read_to_string(root.join(".gitleaksignore")).expect(".gitleaksignore");
+    let mut reason = false;
+    let mut entries = 0;
+    for line in ignore.lines().map(str::trim) {
+        // The reason is the comment block right above the fingerprint, not the file's header.
+        if line.is_empty() {
+            reason = false;
+            continue;
+        }
+        if line.starts_with('#') {
+            reason = true;
+            continue;
+        }
+        let parts: Vec<&str> = line.split(':').collect();
+        assert!(
+            parts.len() == 4
+                && parts[0].len() == 40
+                && parts[0].chars().all(|c| c.is_ascii_hexdigit())
+                && parts[3].parse::<u32>().is_ok()
+                && !line.contains('*'),
+            "not a commit:file:rule:line fingerprint: {line}"
+        );
+        assert!(reason, "no comment saying why: {line}");
+        reason = false;
+        entries += 1;
+    }
+    assert!(entries > 0, "{ignore}");
 }
 
 #[test]

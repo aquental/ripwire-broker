@@ -1,0 +1,6 @@
+# One fingerprint per known false positive: commit:file:rule:line. It excuses that one finding;
+# the same text in another commit, file or line is reported again. Each one says why (D-196).
+
+# tests/props_fs.rs writes a header-only key stub to a tempdir, to prove the online reader refuses
+# files that look like private keys (src/online/reader.rs). No key material.
+abcaabac1333c4aa90484bdbb87c0bab2e138b78:tests/props_fs.rs:private-key:169
