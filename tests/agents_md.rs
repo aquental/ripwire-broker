@@ -594,7 +594,8 @@ fn a_plan_step_not_reported_done_has_no_checked_box() {
     }
 }
 
-/// A Markdown text as GitHub renders it: without `<!-- … -->` comments.
+/// A Markdown text as GitHub renders it outside code: without `<!-- … -->` comments, and
+/// without fenced blocks, where a `- [ ]` line is code and not a checkbox.
 fn visible(doc: &str) -> String {
     let mut out = String::new();
     let mut rest = doc;
@@ -605,7 +606,17 @@ fn visible(doc: &str) -> String {
             .map_or("", |(_, after)| after);
     }
     out.push_str(rest);
-    out
+    let mut fenced = false;
+    out.lines()
+        .filter(|l| {
+            if l.trim_start().starts_with("```") {
+                fenced = !fenced;
+                return false;
+            }
+            !fenced
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// The `- [ ]` items of a text, each with its indented continuation lines, whitespace collapsed.
@@ -640,8 +651,19 @@ fn a_new_pr_opens_with_the_conventions_as_a_checklist() {
     assert_eq!(items.len(), 6, "one box per convention: {items:#?}");
     // Each convention in its own box, with the words that carry the obligation.
     let conventions: [(&str, &[&str]); 6] = [
-        ("a red test first", &["red test", "first", "tests/"]),
-        ("a decision entry", &["D-NNN", "spec/changelog.md"]),
+        (
+            "a red test first",
+            &["red test", "first", "tests/", "mutation"],
+        ),
+        (
+            "a decision entry",
+            &[
+                "D-NNN",
+                "in Portuguese",
+                "spec/changelog.md",
+                "index row and section",
+            ],
+        ),
         (
             "no network crate in the default build",
             &["No network crate", "CA-10"],
@@ -657,9 +679,11 @@ fn a_new_pr_opens_with_the_conventions_as_a_checklist() {
         (
             "what plugin users run",
             &[
-                "change what plugin users run",
                 "integrations/claude-code/",
                 ".claude-plugin/",
+                "asked first",
+                "Ask before",
+                "what changes for plugin users",
             ],
         ),
     ];
@@ -685,7 +709,9 @@ fn a_new_pr_opens_with_the_conventions_as_a_checklist() {
     for path in code_spans(&shown).iter().filter(|s| is_repo_path(s)) {
         assert!(Path::new(ROOT).join(path).exists(), "{path}");
     }
+    // Where the list comes from: the conventions and the rules an agent loads.
     assert!(shown.contains(r#"`handoff.md` §"Convenções""#), "{shown}");
+    assert!(shown.contains("`AGENTS.md`"), "{shown}");
     assert!(
         read("handoff.md").lines().any(|l| l == "## Convenções"),
         "handoff.md has no Convenções section"

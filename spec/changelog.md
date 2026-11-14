@@ -9407,7 +9407,8 @@ curta de "o quê e por quê", seis caixas e uma seção "Verified" em texto livr
 - nenhum crate de rede no build padrão (CA-10), e o motivo de qualquer dependência nova;
 - `scripts/check.sh all` verde;
 - fixtures sintéticas;
-- se a PR muda o que o usuário do plugin executa (`integrations/claude-code/`, `.claude-plugin/`).
+- se a PR mexe em `integrations/claude-code/` ou `.claude-plugin/`: o mantenedor foi consultado antes
+  (`AGENTS.md`, "Ask before") e a PR diz o que muda para quem usa o plugin.
 
 O que foi verificado, e como, fica em texto livre: "os testes passam" não é resposta, e uma caixa
 marcada não diria o quê.
@@ -9448,4 +9449,24 @@ outra árvore e falsos sobreviventes. Válidos, em TDD:
   ponteiro para §"Convenções" tem de achar o título no handoff;
 - **a frase sobre quando o GitHub aplica o template estava errada** (corrigida acima), e a linha de
   status do plano dava a etapa 7 como feita sem dizer que a aceitação pede uma PR aberta.
+
+**Grok** (1.0.77, sobre o `68a8e6c`): seis achados, cinco válidos e um em parte. Quatro já estavam
+corrigidos na rodada acima: o CA-10, quando o GitHub aplica o template, as caixas em comentário e a
+caixa única, e o status do plano. Um agente que abre PR com `gh pr create --body` nunca vê o
+template, o que só reforça a seção "Verified" como texto livre. Válidos e novos, em TDD:
+
+- **uma caixa dentro de um bloco de código passava.** Ali ela é código, não caixa. O teste agora
+  ignora blocos cercados;
+- **os qualificadores podiam sumir sem o teste notar:** "(index row and section)", "(and a mutation
+  shows it bites)" e o "say what changes". Agora são exigidos;
+- **a origem do checklist e a caixa do plugin.** O checklist citava só §"Convenções", mas o comando
+  único, as fixtures e o plugin vêm das regras do `AGENTS.md`. A caixa do plugin era uma pergunta,
+  que numa PR sem plugin ficava parecendo pendente. Agora ela diz que, ao mexer no plugin, o
+  mantenedor foi consultado antes ("Ask before") e a PR diz o que muda. O topo manda marcar e
+  explicar uma caixa que não se aplica;
+- **a entrada D-NNN não dizia "em português"**, e a linha do handoff dava a etapa 7 como feita sem a
+  ressalva da aceitação.
+
+Recusado: o texto das fixtures é o do `AGENTS.md`, palavra por palavra. A tensão com "gravações
+reais" no handoff já existia antes deste patch.
 
