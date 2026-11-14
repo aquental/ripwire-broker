@@ -145,7 +145,9 @@ The order is fixed, and `tests/plugin.rs` holds it:
 1. Raise `version` in `Cargo.toml`; run the gates.
 2. Tag `vX.Y.Z` on `master`. The release workflow (`.github/workflows/release.yml`) runs the
    gates of `rust.yml`, then **waits for an approval** of the `release` environment (Actions, the
-   run, "Review deployments") before it writes anything. Approved, it refuses a tag that is not
+   run, "Review deployments") before it writes anything. That holds once the maintainer has set
+   the environment's required reviewer on GitHub; until then GitHub creates it unprotected and
+   nothing waits. Approved, it refuses a tag that is not
    the `Cargo.toml` version, builds
    `ripwire-broker-vX.Y.Z-<target>.tar.gz` (with `ripwire-broker` and `ripwire-eval`, built with
    `--features online`) for `aarch64-apple-darwin`, `x86_64-apple-darwin`,

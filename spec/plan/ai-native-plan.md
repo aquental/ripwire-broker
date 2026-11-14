@@ -209,7 +209,8 @@ agentes agendados).
 ### 5. Um humano antes de publicar
 
 **Arquivos:** `.github/workflows/release.yml`, `.github/workflows/rust.yml`, `tests/plugin.rs`,
-configuração do repositório, `integrations/claude-code/README.md`.
+configuração do repositório, `integrations/claude-code/README.md`; na execução, também
+`scripts/plugin-surface.sh` e `tests/plugin_surface.rs` (D-197).
 
 Há três rotas até o usuário: a tag `v*` (publica o release), a API de releases, e o `master`
 (o marketplace entrega o plugin do `master`: `register.ts`, `scripts/broker`, `.mcp.json`, o
@@ -255,8 +256,9 @@ barra um agente que decida, ou seja induzido a, aprovar e publicar.
 - uma PR que troca um hash do `checksums.txt` falha no `default`;
 - `scripts/check.sh all` verde.
 
-**Risco:** o passo dos hashes faz rede no job `default` (só `gh release download` de um
-repositório público, só quando o arquivo muda). **Decisão em aberto:** exigir revisão aprovada
+**Risco:** o passo faz rede no job `default`, só em PR: um `git fetch` do commit base em toda PR,
+e `gh release view` e `gh release download` de um repositório público só quando o
+`checksums.txt` muda. Uma falha de rede no fetch reprova o `default`, de propósito (D-197). **Decisão em aberto:** exigir revisão aprovada
 no `master`. Não entra agora: com um só mantenedor e `enforce_admins` ligado, travaria as PRs
 do próprio dono. Volta à mesa se houver um segundo mantenedor.
 

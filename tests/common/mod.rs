@@ -2,7 +2,9 @@
 pub mod classifier;
 pub mod fake;
 pub mod memory;
+pub mod shell;
 pub mod summarizer;
+pub mod workflow;
 use std::path::Path;
 use std::process::Command;
 

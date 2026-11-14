@@ -825,56 +825,62 @@ fn the_release_workflow_publishes_what_install_binary_downloads() {
     assert!(yml.contains("--draft") && yml.contains("--draft=false"));
 }
 
-/// A job's own non-comment lines, from `  <job>:` to the next job.
-fn release_job(yml: &str, job: &str) -> Vec<String> {
-    let header = format!("  {job}:");
-    let is_job_start =
-        |l: &str| l.starts_with("  ") && !l.starts_with("   ") && !l[2..].starts_with('#');
-    yml.lines()
-        .skip_while(|l| *l != header)
-        .enumerate()
-        .take_while(|(i, l)| *i == 0 || !is_job_start(l))
-        .map(|(_, l)| l.split(" #").next().unwrap_or("").trim_end().to_owned())
-        .filter(|l| !l.trim_start().starts_with('#') && !l.trim().is_empty())
-        .collect()
-}
-
 #[test]
 fn the_release_waits_for_a_human_before_its_first_write() {
     // ai-native plan, step 5: the `release` environment's approval comes after the gates and
     // before the draft, the build of what users download, and the publication.
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(".github/workflows/release.yml");
-    let yml = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
-    let has = |job: &str, line: &str| release_job(&yml, job).iter().any(|l| l.trim() == line);
+    use common::workflow::{is_condition, job_block, job_code, job_names, read};
+    let yml = read("release.yml");
+    // No other job: a fifth one without `needs: draft` could write before the approval.
+    assert_eq!(job_names(&yml), ["gates", "draft", "build", "publish"]);
+    // The job's own key, not a step's.
     assert!(
-        has("draft", "environment: release"),
+        job_block(&yml, "draft")
+            .iter()
+            .any(|l| l == "    environment: release"),
         "{:#?}",
-        release_job(&yml, "draft")
+        job_block(&yml, "draft")
     );
     for job in ["gates", "build", "publish"] {
         assert!(
-            !release_job(&yml, job)
+            !job_code(&yml, job)
                 .iter()
-                .any(|l| l.trim_start().starts_with("environment:")),
-            "{job} must not hold its own approval"
+                .any(|l| l.contains("environment:")),
+            "{job} holds an environment"
         );
     }
-    // gates → draft → build → publish, nothing that writes before the approval.
+    let has = |job: &str, line: &str| job_code(&yml, job).iter().any(|l| l.trim() == line);
     assert!(has("draft", "needs: gates"));
     assert!(has("build", "needs: draft"));
     assert!(has("publish", "needs: build"));
     assert!(
-        !release_job(&yml, "gates")
+        !job_code(&yml, "gates")
             .iter()
             .any(|l| l.contains("contents: write")),
         "the gates run before the approval and must not write"
     );
-    for job in ["draft", "build", "publish"] {
-        assert!(
-            !release_job(&yml, job)
-                .iter()
-                .any(|l| l.contains("continue-on-error") || l.trim_start().starts_with("if:")),
-            "{job} can be skipped or its failure ignored"
-        );
+    // Nothing skips a step or turns its failure into a pass.
+    for job in ["gates", "draft", "build", "publish"] {
+        for line in job_code(&yml, job) {
+            assert!(!is_condition(&line), "{job}: {line}");
+            for escape in [
+                "continue-on-error",
+                "|| true",
+                "|| :",
+                "|| exit 0",
+                "set +e",
+            ] {
+                assert!(!line.contains(escape), "{job}: {line}");
+            }
+        }
     }
+    // The tag is checked against the crate's version before the draft exists.
+    let draft = job_code(&yml, "draft");
+    let at = |needle: &str| {
+        draft
+            .iter()
+            .position(|l| l.contains(needle))
+            .unwrap_or_else(|| panic!("no `{needle}` in draft"))
+    };
+    assert!(at(r#"[ "$tag" = "v$crate" ]"#) < at("gh release create"));
 }

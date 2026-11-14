@@ -60,7 +60,9 @@ cargo lint                  # o clippy do job default (alias em .cargo/config.to
 - O alvo `plugin` roda o Claude Code fixado no script (`CLAUDE_CODE_VERSION`, 2.1.292) pelo `npx`,
   não o instalado: o validador mais novo reprova o plugin com avisos que o fixado não emite (D-193).
 - **CI** (`.github/workflows/rust.yml`): os jobs `default`, `online`, `plugin` e `secrets` chamam
-  `scripts/check.sh` com o alvo de mesmo nome; os passos moram no script. `default` e `online` são
+  `scripts/check.sh` com o alvo de mesmo nome; os passos moram no script, salvo o "Plugin
+  surface" do `default`, só em PR: avisa no resumo quando a PR muda o plugin e confere o
+  `checksums.txt` contra o release (`scripts/plugin-surface.sh`, D-197). `default` e `online` são
   obrigatórios no `master`; `plugin` e `secrets` não (o `secrets` vira obrigatório por decisão,
   depois de duas semanas sem falso positivo, D-196). O `secrets` roda o gitleaks fixado (versão e
   SHA-256 no job) sobre o histórico inteiro, resoluções de merge incluídas; as exceções são
@@ -69,7 +71,8 @@ cargo lint                  # o clippy do job default (alias em .cargo/config.to
   `ripwire` (última release, D-188) e o nextest antes de chamar o script.
 - **Release** (`.github/workflows/release.yml`, D-160): só numa tag `v*` igual à versão do
   `Cargo.toml`. Chama o `rust.yml` e espera a aprovação do environment `release` antes do
-  primeiro job que escreve (D-197), compila os quatro alvos e publica tarballs e `SHA256SUMS`. A
+  primeiro job que escreve (D-197; só depois que o mantenedor configurar o revisor no GitHub,
+  até lá o environment existe sem proteção), compila os quatro alvos e publica tarballs e `SHA256SUMS`. A
   ordem de publicar uma versão está no README do plugin ("Publishing a version"): os hashes entram
   no `scripts/checksums.txt` depois do release, num PR.
 - **`cargo-deny`:** agendado às segundas no `master` (`supply-chain.yml`), nunca em PR (D-108).
@@ -109,6 +112,9 @@ cargo lint                  # o clippy do job default (alias em .cargo/config.to
   e comandos citados.
 - **`scripts/check.sh` e `.cargo/config.toml`:** o comando único dos checks de PR e os aliases
   `cargo lint`/`lint-online` (D-194); `tests/check_script.rs` o testa com ferramentas falsas.
+- **`scripts/plugin-surface.sh`:** o passo de PR que avisa quando o plugin muda e confere os
+  hashes fixados contra o release (D-197); `tests/plugin_surface.rs` o testa com `git` e `gh`
+  falsos. `tests/common/workflow.rs` lê os workflows por linha, sem comentários, para os testes.
 - **`tests/`:** um arquivo por costura pública (`broker`, `mcp_surface`, `hooks`, `cli`, `statusline`,
   `notes`, `summarizer`, `worktree`, `upstream_ripwire`, `online*`, `memory_*`, `props*`, `eval`,
   `plugin`). As fixtures do ripwire e dos hosts são gravações reais.

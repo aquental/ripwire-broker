@@ -9334,3 +9334,42 @@ configuração acima e conferir com `gh api repos/aquental/ripwire-broker/enviro
 no próximo release real, ver `gates` concluído e `draft` em `waiting` até a aprovação; abrir uma
 PR que troque um hash e ver o `default` falhar.
 
+**Revisão adversarial** (Codex, Antigravity com o prazo de 15 min e o `rust-review`; o Grok
+ainda rodava quando esta rodada fechou). Cada achado conferido no código e, quando possível, com
+o `gh` real lendo o release `v0.1.0`. Válidos, sem repetição, todos em TDD (teste vermelho ou
+mutante sobrevivente antes, mutante morto depois; 19 mutantes):
+
+- **o teste do passo da PR só procurava substrings.** Passavam `&& false` no `if:`, um
+  `echo` antes do script, `|| true`, o passo sem o `git fetch`, sem o `GH_TOKEN` ou com outro
+  nome. Agora as linhas do passo, sem comentários, têm de ser exatamente as esperadas;
+- **o teste da aprovação só olhava os quatro jobs nomeados.** Um quinto job com `contents:
+  write` e sem `needs` passava, e escreveria antes da aprovação; também passavam o
+  `environment:` dentro de um passo, `- if: false` num passo, `|| true` no `gh release create` e
+  a conferência da versão da tag removida. Agora os jobs têm de ser exatamente os quatro, o
+  `environment: release` tem de ser a chave do próprio `draft`, nenhum job tem condição ou escape
+  de falha, e a conferência da tag vem antes do rascunho. A frase acima, "em nenhum outro job",
+  passou a ser verdade;
+- **um `git mv` do `checksums.txt` pulava a conferência:** com detecção de renomeação, o
+  `--name-only` só lista o nome novo. Agora `--no-renames`, e o script falha quando a PR remove
+  ou renomeia o arquivo;
+- **dois lados vazios ou em branco eram "iguais":** um `checksums.txt` só com a tag e uma linha
+  em branco contra um `SHA256SUMS` só com uma quebra de linha passava (achado do Antigravity).
+  Agora as duas listas têm de ter ao menos uma linha, todas no formato `sha256  asset`, nenhuma
+  repetida;
+- **o que os testes do script não pegavam:** tirar o `sort` (a ordem é livre, e agora há teste
+  com as linhas invertidas), um `sort -u` só de um lado, tirar o `--jq .isDraft` (o `gh` real
+  então devolve `{"isDraft":false}` e todo release pareceria rascunho; o `gh` falso agora responde
+  igual), fixar `origin/master` no lugar do argumento, e a guarda do número de argumentos;
+- **textos:** o README do plugin e o handoff diziam que o release "espera a aprovação" como fato.
+  Só vale depois que o mantenedor configurar o revisor. O "Risco" do plano dizia que só há rede
+  quando o arquivo muda, mas o `git fetch` do commit base roda em toda PR. O mapa do handoff, o
+  item do CI e a lista de arquivos da etapa não citavam o script nem o teste novos;
+- **do `rust-review`:** o leitor de jobs do YAML existia em três cópias, com regras diferentes de
+  comentário. Agora é um só, `tests/common/workflow.rs`, que só corta um comentário fora de aspas,
+  e o laço pelos bash da máquina é `tests/common/shell.rs`.
+
+Recusados, com o motivo: um `if:` no job `gates`, porque pular os portões também pula o `draft`,
+o `build` e o `publish` pelo `needs`, e `continue-on-error` não é aceito num job que chama
+workflow reutilizável; e um `contents: write` no nível do workflow, porque o `rust.yml` chamado
+declara `contents: read` e os jobs que escrevem declaram as próprias permissões.
+

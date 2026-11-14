@@ -8,9 +8,13 @@
 //! release fails. The script runs with fake `git` and `gh` here; CI runs it for real on PRs.
 #![cfg(unix)]
 
+mod common;
+
+use common::shell::bashes as shells;
+
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 
 const SCRIPT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/scripts/plugin-surface.sh");
@@ -24,41 +28,57 @@ const SUMS: &str = "\
 4444444444444444444444444444444444444444444444444444444444444444  ripwire-broker-v0.2.0-x86_64-unknown-linux-gnu.tar.gz
 ";
 
-/// Logs `name args`. `git diff --name-only … -- PATHS` prints the lines of `FAKE_CHANGED` under
-/// one of PATHS, as git filters by pathspec. `gh release view` prints
-/// `FAKE_DRAFT` (default false) and exits `FAKE_VIEW_EXIT`; `gh release download` writes
-/// `FAKE_SUMS` to its `--output` and exits `FAKE_DL_EXIT`.
+/// Logs `name args`, and answers as the real tools would:
+/// - `git diff … -- PATHS` prints the lines of `FAKE_CHANGED` under one of PATHS. With rename
+///   detection on (no `--no-renames`), `FAKE_RENAMED_FROM` is left out: git lists only the new name.
+/// - `gh release view` exits `FAKE_VIEW_EXIT`, and prints `FAKE_DRAFT` (default false) through
+///   `--jq .isDraft`, or the JSON object without it.
+/// - `gh release download` writes `FAKE_SUMS` to its `--output` and exits `FAKE_DL_EXIT`.
 const FAKE: &str = r#"#!/bin/bash
 printf '%s\n' "${0##*/} $*" >> "$FAKE_LOG"
-case "${0##*/} $1 $2" in
-    "git diff --name-only")
+case "${0##*/} $1" in
+    "git diff")
+        renames=true
+        for arg in "$@"; do [ "$arg" = --no-renames ] && renames=false; done
         while [ "$#" -gt 0 ] && [ "$1" != -- ]; do shift; done
         shift
         printf '%b' "${FAKE_CHANGED:-}" | while IFS= read -r file; do
+            if $renames && [ "$file" = "${FAKE_RENAMED_FROM:-}" ]; then continue; fi
             for path in "$@"; do
                 case "$file" in "$path" | "$path"/*) echo "$file" ;; esac
             done
         done
         ;;
-    "gh release view")
-        [ "${FAKE_VIEW_EXIT:-0}" = 0 ] || { echo "release not found" >&2; exit "$FAKE_VIEW_EXIT"; }
-        echo "${FAKE_DRAFT:-false}"
-        ;;
-    "gh release download")
-        [ "${FAKE_DL_EXIT:-0}" = 0 ] || { echo "download failed" >&2; exit "$FAKE_DL_EXIT"; }
-        out=""
-        while [ "$#" -gt 0 ]; do
-            if [ "$1" = --output ]; then out=$2; fi
-            shift
-        done
-        printf '%b' "${FAKE_SUMS:-}" > "$out"
+    "gh release")
+        case "$2" in
+            view)
+                [ "${FAKE_VIEW_EXIT:-0}" = 0 ] || { echo "release not found" >&2; exit "$FAKE_VIEW_EXIT"; }
+                case " $* " in
+                    *" --jq .isDraft "*) echo "${FAKE_DRAFT:-false}" ;;
+                    *) echo "{\"isDraft\":${FAKE_DRAFT:-false}}" ;;
+                esac
+                ;;
+            download)
+                [ "${FAKE_DL_EXIT:-0}" = 0 ] || { echo "download failed" >&2; exit "$FAKE_DL_EXIT"; }
+                out=""
+                while [ "$#" -gt 0 ]; do
+                    if [ "$1" = --output ]; then out=$2; fi
+                    shift
+                done
+                printf '%b' "${FAKE_SUMS:-}" > "$out"
+                ;;
+        esac
         ;;
 esac
 "#;
 
+/// The base the step passes; any revision name, so a script that ignores it is caught.
+const BASE: &str = "base-sha-1234";
+
 struct Sandbox {
     dir: tempfile::TempDir,
     env: Vec<(String, String)>,
+    args: Vec<String>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -101,6 +121,7 @@ impl Sandbox {
         let sandbox = Sandbox {
             dir,
             env: Vec::new(),
+            args: vec![BASE.to_string()],
         };
         sandbox.checksums(&format!("v0.2.0\n{SUMS}"))
     }
@@ -109,6 +130,16 @@ impl Sandbox {
         let path = self.dir.path().join("repo").join(CHECKSUMS);
         fs::create_dir_all(path.parent().expect("parent")).expect("dirs");
         fs::write(path, body).expect("checksums");
+        self
+    }
+
+    fn without_checksums(self) -> Self {
+        fs::remove_file(self.dir.path().join("repo").join(CHECKSUMS)).expect("rm checksums");
+        self
+    }
+
+    fn args(mut self, args: &[&str]) -> Self {
+        self.args = args.iter().map(ToString::to_string).collect();
         self
     }
 
@@ -139,7 +170,7 @@ impl Sandbox {
         let _ = fs::remove_file(&summary);
         let mut cmd = Command::new(shell);
         cmd.arg(self.dir.path().join("repo/scripts/plugin-surface.sh"))
-            .arg("origin/master")
+            .args(&self.args)
             .current_dir(self.dir.path().join("repo"))
             .env_clear()
             .env(
@@ -174,26 +205,6 @@ impl Sandbox {
     }
 }
 
-fn shells() -> Vec<PathBuf> {
-    let mut shells: Vec<PathBuf> = Vec::new();
-    for dir in std::env::var("PATH").unwrap_or_default().split(':') {
-        let bash = Path::new(dir).join("bash");
-        if bash.is_file() {
-            shells.push(bash);
-            break;
-        }
-    }
-    let system = PathBuf::from("/bin/bash");
-    if system.is_file()
-        && !shells
-            .iter()
-            .any(|s| fs::canonicalize(s).ok() == fs::canonicalize(&system).ok())
-    {
-        shells.push(system);
-    }
-    shells
-}
-
 #[test]
 fn a_pr_that_leaves_the_plugin_alone_says_nothing_and_downloads_nothing() {
     let run = Sandbox::new().changed(&["src/broker.rs"]).run();
@@ -202,7 +213,7 @@ fn a_pr_that_leaves_the_plugin_alone_says_nothing_and_downloads_nothing() {
     assert!(run.gh_calls().is_empty(), "{}", run.calls);
     assert!(
         run.calls.contains(
-            "git diff --name-only origin/master HEAD -- integrations/claude-code .claude-plugin"
+            "git diff --no-renames --name-only base-sha-1234 HEAD -- integrations/claude-code .claude-plugin"
         ),
         "{}",
         run.calls
@@ -336,48 +347,92 @@ fn a_failing_git_diff_fails_instead_of_reading_no_change() {
     assert!(!run.ok(), "{}", run.both());
 }
 
-/// The `default` job's lines without comments.
-fn default_job() -> Vec<String> {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(".github/workflows/rust.yml");
-    let yml = fs::read_to_string(path).expect("rust.yml");
-    let is_job_start =
-        |l: &str| l.starts_with("  ") && !l.starts_with("   ") && !l[2..].starts_with('#');
-    yml.lines()
-        .skip_while(|l| *l != "  default:")
-        .enumerate()
-        .take_while(|(i, l)| *i == 0 || !is_job_start(l))
-        .map(|(_, l)| l.split(" #").next().unwrap_or("").trim_end().to_owned())
-        .filter(|l| !l.trim_start().starts_with('#') && !l.trim().is_empty())
-        .collect()
+#[test]
+fn the_base_is_the_one_argument() {
+    for args in [&[][..], &["a", "b"][..]] {
+        let run = Sandbox::new().args(args).changed(&[CHECKSUMS]).run();
+        assert_eq!(run.code, Some(2), "{args:?}: {}", run.both());
+        assert!(run.calls.is_empty(), "{args:?}: {}", run.calls);
+    }
+}
+
+#[test]
+fn a_renamed_or_deleted_checksums_file_is_still_checked() {
+    // With rename detection, `git diff --name-only` lists only the new name.
+    let run = Sandbox::new()
+        .without_checksums()
+        .env("FAKE_RENAMED_FROM", CHECKSUMS)
+        .changed(&[CHECKSUMS, "integrations/claude-code/scripts/checksums.old"])
+        .run();
+    assert!(!run.ok(), "{}", run.both());
+    assert!(
+        run.both().contains("::error::") && run.both().contains("checksums.txt"),
+        "{}",
+        run.both()
+    );
+}
+
+#[test]
+fn pinned_lines_in_another_order_pass() {
+    let reversed: Vec<&str> = SUMS.lines().rev().collect();
+    let run = Sandbox::new()
+        .checksums(&format!("v0.2.0\n{}\n", reversed.join("\n")))
+        .changed(&[CHECKSUMS])
+        .run();
+    assert!(run.ok(), "{}", run.both());
+}
+
+#[test]
+fn a_duplicate_pinned_line_fails() {
+    let first = SUMS.lines().next().expect("a line");
+    let run = Sandbox::new()
+        .checksums(&format!("v0.2.0\n{SUMS}{first}\n"))
+        .changed(&[CHECKSUMS])
+        .run();
+    assert!(!run.ok(), "{}", run.both());
+}
+
+#[test]
+fn lines_that_are_not_hashes_fail_even_when_both_sides_agree() {
+    for (pinned, published) in [
+        ("v0.2.0\n\n", "\\n"),
+        ("v0.2.0\n \n", " \\n"),
+        (
+            "v0.2.0\nnot-a-hash  asset.tar.gz\n",
+            "not-a-hash  asset.tar.gz\\n",
+        ),
+    ] {
+        let run = Sandbox::new()
+            .checksums(pinned)
+            .env("FAKE_SUMS", published)
+            .changed(&[CHECKSUMS])
+            .run();
+        assert!(!run.ok(), "{pinned:?}: {}", run.both());
+    }
 }
 
 #[test]
 fn the_default_job_runs_the_step_on_pull_requests_against_the_base() {
-    let job = default_job();
-    let block = job.join("\n");
-    let step = job
+    let yml = common::workflow::read("rust.yml");
+    let job = common::workflow::job_code(&yml, "default");
+    let step: Vec<String> = common::workflow::step(&job, "scripts/plugin-surface.sh")
         .iter()
-        .position(|l| l.contains("scripts/plugin-surface.sh"))
-        .unwrap_or_else(|| panic!("the default job does not run the script:\n{block}"));
-    // The step that runs it: from its `- ` line to the next step's.
-    let start = job[..=step]
-        .iter()
-        .rposition(|l| l.trim_start().starts_with("- "))
-        .expect("the step's first line");
-    let end = job[step + 1..]
-        .iter()
-        .position(|l| l.trim_start().starts_with("- "))
-        .map_or(job.len(), |i| step + 1 + i);
-    let this = job[start..end].join("\n");
-    assert!(
-        this.contains("if: github.event_name == 'pull_request'"),
-        "only a PR has a base to compare with:\n{this}"
+        .map(|l| l.trim().to_string())
+        .collect();
+    // Exactly this: only on PRs (only a PR has a base), the commit the PR's merge was built on
+    // (the base branch's tip may have moved), fetched alone (the checkout is one commit deep),
+    // and nothing that turns a failure into a pass.
+    assert_eq!(
+        step,
+        [
+            "- name: Plugin surface",
+            "if: github.event_name == 'pull_request'",
+            "env:",
+            "GH_TOKEN: ${{ github.token }}",
+            "BASE_SHA: ${{ github.event.pull_request.base.sha }}",
+            "run: |",
+            r#"git fetch --no-tags --depth=1 origin "$BASE_SHA""#,
+            "scripts/plugin-surface.sh FETCH_HEAD",
+        ]
     );
-    // The commit the PR's merge was built on, not the base branch's tip, which may have moved.
-    assert!(
-        this.contains("github.event.pull_request.base.sha"),
-        "{this}"
-    );
-    assert!(this.contains("FETCH_HEAD"), "{this}");
-    assert!(!block.contains("continue-on-error"), "{block}");
 }
