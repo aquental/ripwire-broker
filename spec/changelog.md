@@ -203,6 +203,7 @@
 | 2026-11-14 18:15 | Etapa 8 do plano AI-native: `spec/TEMPLATE.md`, o molde de spec com as seções que aparecem nos PRDs (contexto e problema, objetivos e não objetivos, critérios de aceitação Dado/quando/então numerados como os CA-NN, falhas e comportamento obrigatório, como desfazer, decisões relacionadas, status e data); a convenção do handoff aponta para ele; nenhum documento existente foi reformatado | [D-199](#d-199--uma-spec-nova-parte-de-um-molde) |
 | 2026-11-14 18:56 | Etapa 9 do plano AI-native: "Rolling back a version" no README do plugin (lado do mantenedor, lado do usuário, o que não volta sozinho, como ver qual binário roda, o store de memória com esquema desconhecido), ensaiado de ponta a ponta com um HOME descartável e um marketplace local (v0.1.0 → v0.2.0 simulada → v0.1.0) e com um store adulterado para o esquema 2. O ensaio achou que o `doctor` não diz qual binário roda, que o `scripts/broker` de um terminal não acha o binário fixado sem `CLAUDE_PLUGIN_DATA`, e que nenhum comando descarta um store ilegível; os dois últimos ficam como issue para o mantenedor | [D-200](#d-200--o-caminho-de-volta-de-uma-versão-ensaiado) |
 | 2026-11-14 19:02 | Etapa 10 do plano AI-native: três skills próprias em `.agents/skills/`, com links em `.claude/skills/` e `.grok/skills/` (`decision-entry`, `release`, `audit-rust`), cada uma com a seção que diz onde para, pela lista "Ask before"; o prompt da auditoria Rust virou a skill e o arquivo antigo, um ponteiro. O índice do changelog passa a ser um só, crescente do D-001 ao último, com a linha do D-188 que faltava; as horas do D-193 ao D-200 foram corrigidas para as dos commits | [D-201](#d-201--as-skills-do-repositório-e-um-índice-de-decisões-em-ordem) |
+| 2026-11-14 19:36 | Verificação final do plano AI-native: o analisador AINE, rodado de novo na ponta da pilha, dá 44 aprovados e 2 reprovados (antes, 26 e 20). Os 18 esperados passam, e os dois de credencial e de humano no caminho seguem reprovados por decisão (D-192). Nenhum item regrediu. O teste instável de `tests/plugin.rs` não se reproduziu em 70 rodadas sob carga | [D-202](#d-202--a-verificação-final-do-plano-ai-native-18-dos-20-itens-passam) |
 
 ---
 
@@ -9755,4 +9756,72 @@ em TDD:
 Recusado: que entregar `gh release create` ao mantenedor desvie do portão do `release.yml`. A linha
 está na lista do que a skill não roda (criar ou editar um release, item da "Ask before"), e nenhum
 passo pede criar um release.
+
+## D-202 — A verificação final do plano AI-native: 18 dos 20 itens passam
+
+**O que foi feito.** O `aine-readiness-analyzer`, a mesma skill da auditoria de origem, rodou de
+novo sobre a ponta da pilha (`ai-native/10-skills`, `4a4458e`). Cada resposta veio dos arquivos da
+árvore, não das mensagens de commit, e o `scripts/check.sh all` rodou ali, verde, com o ripwire no
+`PATH`. O `docs/AINE-REPORT.md` foi refeito; a versão de antes fica no git.
+
+**Resultado.** 44 aprovados, 2 reprovados, 0 não aplicáveis. Antes eram 26, 20 e 0. Passaram os 18
+que o plano esperava:
+
+- arquivo de instruções, comandos, nomes que existem, especificidade, layout, regras não óbvias,
+  atualidade e tamanho (etapa 1);
+- operações que precisam de um humano (etapa 2);
+- varredura de segredos (etapa 3);
+- um comando que roda tudo, scripts de tarefa, scripts nomeados (etapa 6);
+- regras de revisão escritas (etapa 7);
+- template de spec (etapa 8);
+- caminho de volta (etapa 9);
+- biblioteca de skills, cobertura do trabalho repetido (etapa 10).
+
+Seguem reprovados, por decisão, os dois itens de credenciais e de humano no caminho (D-192). Um
+agente com o login do mantenedor ainda pode criar tag, publicar, aprovar e mesclar, e o environment
+`release` só protege depois que o mantenedor o configurar. Nenhum item que passava regrediu.
+
+**O que o analisador pôs em dúvida, e o que mudou:**
+
+- **o layout passou por julgamento.** O mapa do handoff não citava `examples/`, `docs/`,
+  `spec/prompt/` nem `spec/old/`. Ganhou as quatro linhas;
+- **a cobertura das skills:** a triagem das PRs do Dependabot (18 mescladas) não tem skill, e a
+  política dela mora nos comentários do `dependabot.yml`. O principal do trabalho repetido está
+  coberto;
+- **itens que dependem de configuração do GitHub** (proteção de branch, o `secrets` como check
+  obrigatório, push protection, o environment, o ruleset de tag): o relatório os dá pelo que a
+  árvore mostra e diz que a configuração não foi vista;
+- **um detalhe do `scripts/check.sh all`:** com `default` e `online` juntos, a lista de ferramentas
+  que faltam repete `cargo` e `cargo-nextest`. É cosmético e ficou como está.
+
+**O teste instável de `tests/plugin.rs`** ("Fora do relatório" no plano) não se reproduziu.
+Foram 30 rodadas de `cargo nextest run --test plugin` e 40 de `cargo test --test plugin`, com o
+Grok e outras suítes carregando a máquina, e nenhuma falha. O `cargo test` entrou porque roda os
+testes como threads de um mesmo processo, onde estado compartilhado aparece; o nextest roda cada
+teste num processo. Sem o nome do teste não há issue a abrir, e o item fica aberto no plano.
+
+**As entradas que a verificação final pede** existem:
+
+| O que | Onde |
+| --- | --- |
+| o `AGENTS.md` como ponto de entrada | D-195 |
+| o environment `release` e sua configuração | D-197; a configuração é do mantenedor |
+| a verificação do `checksums.txt` por máquina | D-197 |
+| o script único como fonte dos passos do CI | D-194 |
+| o gitleaks | D-196 |
+
+A promoção do `secrets` a obrigatório fica para uma decisão depois de duas semanas sem falso
+positivo.
+
+**O que fica com o mantenedor**, de todas as etapas:
+
+- empurrar as branches e abrir as PRs, na ordem da pilha: `ai-native/6-check-script` → `1-2-4` →
+  `3` → `5` → `7` → `8` → `9` → `10`;
+- ligar o secret scanning e o push protection, conferir o job `secrets` num branch descartável, e
+  fazer o ensaio do push recusado (D-196);
+- criar o environment `release` com revisor e restrito a `v*`, criar um ruleset de tag para `v*`,
+  e ver o `draft` esperar no próximo release real (D-197);
+- abrir uma PR para ver o template (D-198);
+- abrir a issue do store ilegível e do resolvedor, com o texto do D-200;
+- promover o `secrets` a obrigatório, quando for a hora.
 

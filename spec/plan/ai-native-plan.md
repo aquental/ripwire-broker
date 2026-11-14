@@ -3,7 +3,7 @@
 Data: **2026-11-14**. Base: `master`, HEAD `d9aa86e`.
 Origem: [`docs/AINE-REPORT.md`](../../docs/AINE-REPORT.md) (26 aprovados, 20 reprovados, 0 não
 aplicáveis).
-Status: **em execução** (etapa 6 feita, D-194; etapas 1, 2 e 4, D-195; etapa 3 sem a parte do mantenedor, D-196; etapa 5 sem a parte do mantenedor, D-197; etapa 7 sem a aceitação, que pede uma PR aberta, D-198; etapa 8, D-199; etapa 9, D-200; etapa 10, D-201). Revisado pelo Codex em 2026-11-14: 14 achados, todos
+Status: **em execução** (etapa 6 feita, D-194; etapas 1, 2 e 4, D-195; etapa 3 sem a parte do mantenedor, D-196; etapa 5 sem a parte do mantenedor, D-197; etapa 7 sem a aceitação, que pede uma PR aberta, D-198; etapa 8, D-199; etapa 9, D-200; etapa 10, D-201; verificação final, D-202). Revisado pelo Codex em 2026-11-14: 14 achados, todos
 conferidos no código e incorporados (ver [Revisão adversarial](#revisão-adversarial)).
 Decisão: [D-189](../changelog.md#d-189--plano-de-prontidão-para-agentes-revisado-pelo-codex).
 Conferido contra a árvore antes da execução em 2026-11-14
@@ -401,14 +401,16 @@ formato das existentes. **Dependências:** etapas 1, 2, 4 e 5.
 - [ ] Um teste de `tests/plugin.rs` falhou uma vez em `cargo test --locked` e passou nas duas
   execuções seguintes (886 aprovados no total). O nome não foi capturado. Reproduzir com
   `cargo nextest run --test plugin` em laço sob carga, abrir issue com o nome, e tratar como os
-  #120 e #122.
+  #120 e #122. Não reproduzido (D-202): 30 rodadas com nextest e 40 com `cargo test`, sob carga,
+  sem falha; sem o nome não há issue a abrir. Fica aberto.
 
 ## Verificação final
 
-- [ ] Rodar de novo o analisador e comparar com o `docs/AINE-REPORT.md` de 2026-11-14.
+- [x] Rodar de novo o analisador e comparar com o `docs/AINE-REPORT.md` de 2026-11-14 (D-202:
+  44 aprovados e 2 reprovados, contra 26 e 20).
   Esperado: 18 dos 20 reprovados passam. Os itens de credenciais e de humano no
   caminho continuam reprovados, por decisão (D-192).
-- [ ] Entradas D-NNN para: o `AGENTS.md` como ponto de entrada; o environment `release` e sua configuração; a verificação do
+- [x] Entradas D-NNN para: o `AGENTS.md` como ponto de entrada; o environment `release` e sua configuração; a verificação do
   `checksums.txt` por máquina; o script único como fonte dos passos do CI; o gitleaks e a
   promoção a obrigatório.
 
