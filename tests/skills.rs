@@ -127,9 +127,11 @@ fn every_own_skill_stops_where_the_ask_before_list_says() {
         "rust.yml",
         "deny.toml",
         ".gitleaks",
+        "approv",
     ];
     for name in own_skills() {
-        let (stops, rest) = stops_and_rest(&skill(&name));
+        // The body: the description, for choosing the skill, may name what the skill hands over.
+        let (stops, rest) = stops_and_rest(&body(&name));
         assert!(
             stops.contains("AGENTS.md") && stops.contains("Ask before"),
             "{name}: the stop section does not cite AGENTS.md \"Ask before\""
@@ -138,15 +140,16 @@ fn every_own_skill_stops_where_the_ask_before_list_says() {
             stops.contains("does not run"),
             "{name}: the stop section does not say the skill does not run these"
         );
-        for word in ["executes", "run them yourself", "without asking"] {
+        for word in ["executes", "yourself", "without asking", "runs these"] {
             assert!(
                 !stops.contains(word),
                 "{name}: the stop section says {word:?}"
             );
         }
+        let rest = rest.to_lowercase();
         for effect in EFFECTS {
             assert!(
-                !rest.contains(effect),
+                !rest.contains(&effect.to_lowercase()),
                 "{name}: `{effect}` outside the section where it stops"
             );
         }
@@ -160,7 +163,12 @@ fn the_release_skill_prepares_and_hands_over_the_human_steps() {
     // Line breaks are not meaning: compare the flattened text.
     let release = release.split_whitespace().collect::<Vec<_>>().join(" ");
     let stops = stops.split_whitespace().collect::<Vec<_>>().join(" ");
-    for step in ["tag", "`release` environment", "merge", "plugin's pins"] {
+    for step in [
+        "git switch master && git pull --ff-only && git tag vX.Y.Z",
+        "`release` environment",
+        "merge",
+        "plugin's pins",
+    ] {
         assert!(
             stops.contains(step),
             "the release skill does not stop at {step}"
@@ -189,7 +197,8 @@ fn the_decision_entry_skill_writes_what_the_changelog_holds() {
     for rule in [
         "date '+%Y-%m-%d %H:%M'",
         "spec/changelog.md",
-        "at the end of the index",
+        "at the end of the index: after the last",
+        "Never invent or round it.",
         "at the end of the file",
         "## D-NNN — ",
         "in Portuguese",
@@ -310,7 +319,8 @@ fn the_changelog_index_has_one_row_per_decision_in_order() {
     let range = section_lines(&handoff, "Convenções");
     let conventions = handoff.lines().collect::<Vec<_>>()[range].join("\n");
     assert!(
-        conventions.contains("crescente") && !conventions.contains("decrescente"),
+        conventions.contains("O índice é crescente, do D-001 ao último")
+            && !conventions.contains("decrescente"),
         "{conventions}"
     );
 }

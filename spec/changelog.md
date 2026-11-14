@@ -9736,3 +9736,23 @@ foi rodado com um alvo de compilação próprio. Válidos, em TDD:
   mapa do handoff não citavam os arquivos novos; e, do `rust-review`, os auxiliares de Markdown
   agora são `tests/common/markdown.rs` e o arquivo declara `#![cfg(unix)]`.
 
+**Grok** (1.0.77, sobre o `cf8b00b`): oito achados, sete válidos. Cinco já estavam fechados pela
+rodada acima: a seção de parada que mandava executar, a cópia da auditoria, a âncora errada no
+índice, e a autorização em bloco de `integrations/claude-code/`. Três eram novos, e foram tratados
+em TDD:
+
+- **a tag era entregue sem "no `master`".** O `release.yml` roda em qualquer tag `v*` e só confere
+  a versão. Agora o comando entregue é
+  `git switch master && git pull --ff-only && git tag vX.Y.Z && git push origin vX.Y.Z`, depois
+  da mescla;
+- **um "Approve the `release` environment" fora da seção de parada passava.** A conferência dos
+  efeitos agora lê só o corpo da skill (a `description` pode nomear o que ela entrega) e ignora
+  maiúsculas. A seção de parada também não pode dizer "yourself" nem "runs these";
+- **a `decision-entry` e a convenção do handoff eram conferidas por palavra.** "Arredonde para a
+  hora", "no início do índice" e "O índice não é crescente" passavam. Agora o teste exige as frases
+  inteiras.
+
+Recusado: que entregar `gh release create` ao mantenedor desvie do portão do `release.yml`. A linha
+está na lista do que a skill não roda (criar ou editar um release, item da "Ask before"), e nenhum
+passo pede criar um release.
+

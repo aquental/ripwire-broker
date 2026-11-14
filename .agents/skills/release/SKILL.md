@@ -39,7 +39,10 @@ Each of these is in the list of `AGENTS.md` "Ask before" (publishing, what plugi
 gates). The skill does not run them on its own: it shows the maintainer the exact command or
 change and waits.
 
-- **The tag:** `git tag vX.Y.Z` and `git push origin vX.Y.Z` start `release.yml`. The maintainer's.
+- **The tag,** on `master` after the version bump is merged (`release.yml` runs on any `v*` tag and
+  checks only that it names the `Cargo.toml` version):
+  `git switch master && git pull --ff-only && git tag vX.Y.Z && git push origin vX.Y.Z`. The
+  maintainer's.
 - **The approval of the `release` environment** in the Actions run ("Review deployments"). The
   maintainer's.
 - **The plugin's pins.** Writing `vX.Y.Z` and the `SHA256SUMS` lines in
