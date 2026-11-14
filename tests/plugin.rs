@@ -889,3 +889,73 @@ fn the_release_waits_for_a_human_before_its_first_write() {
     };
     assert!(at(r#"[ "$tag" = "v$crate" ]"#) < at("gh release create"));
 }
+
+#[test]
+fn the_readme_says_how_to_roll_back_a_version() {
+    // ai-native plan, step 9: the way back, right after the way forward.
+    let readme = std::fs::read_to_string(plugin_root().join("README.md")).expect("README.md");
+    let headings: Vec<&str> = readme.lines().filter(|l| l.starts_with("## ")).collect();
+    let publishing = headings
+        .iter()
+        .position(|h| *h == "## Publishing a version")
+        .expect("Publishing a version");
+    assert_eq!(
+        headings.get(publishing + 1),
+        Some(&"## Rolling back a version"),
+        "{headings:?}"
+    );
+    let section: String = readme
+        .lines()
+        .skip_while(|l| *l != "## Rolling back a version")
+        .skip(1)
+        .take_while(|l| !l.starts_with("## "))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let flat = section.split_whitespace().collect::<Vec<_>>().join(" ");
+    for (what, words) in [
+        // The maintainer: the pins and the plugin's version go back together (the tests hold them
+        // equal), through a PR the hash check reads, and the bad release is marked.
+        (
+            "the maintainer's side",
+            &[
+                "scripts/checksums.txt",
+                "plugin.json",
+                "SHA256SUMS",
+                "--prerelease",
+            ][..],
+        ),
+        // The user: update, reinstall the binary, restart.
+        (
+            "the user's side",
+            &[
+                "claude plugin update ripwire-broker@aquental",
+                "`sh install-binary.sh` again",
+                "Restart the session",
+            ],
+        ),
+        // What does not go back on its own, and how to see what runs.
+        (
+            "what stays",
+            &[
+                "the `binary` option, the pinned release",
+                "keeps running that binary",
+                "PATH",
+                "scripts/broker\" --version",
+            ],
+        ),
+        // A memory store the older binary cannot read.
+        (
+            "an unreadable memory store",
+            &[
+                "unknown_schema",
+                "`memory forget --all` does not get out of it",
+                "stop the server and the hooks",
+                "move the workspace's store",
+            ],
+        ),
+    ] {
+        for word in words {
+            assert!(flat.contains(word), "{what}: no {word:?} in: {flat}");
+        }
+    }
+}

@@ -3,7 +3,7 @@
 Data: **2026-11-14**. Base: `master`, HEAD `d9aa86e`.
 Origem: [`docs/AINE-REPORT.md`](../../docs/AINE-REPORT.md) (26 aprovados, 20 reprovados, 0 não
 aplicáveis).
-Status: **em execução** (etapa 6 feita, D-194; etapas 1, 2 e 4, D-195; etapa 3 sem a parte do mantenedor, D-196; etapa 5 sem a parte do mantenedor, D-197; etapa 7 sem a aceitação, que pede uma PR aberta, D-198; etapa 8, D-199). Revisado pelo Codex em 2026-11-14: 14 achados, todos
+Status: **em execução** (etapa 6 feita, D-194; etapas 1, 2 e 4, D-195; etapa 3 sem a parte do mantenedor, D-196; etapa 5 sem a parte do mantenedor, D-197; etapa 7 sem a aceitação, que pede uma PR aberta, D-198; etapa 8, D-199; etapa 9, D-200). Revisado pelo Codex em 2026-11-14: 14 achados, todos
 conferidos no código e incorporados (ver [Revisão adversarial](#revisão-adversarial)).
 Decisão: [D-189](../changelog.md#d-189--plano-de-prontidão-para-agentes-revisado-pelo-codex).
 Conferido contra a árvore antes da execução em 2026-11-14
@@ -340,7 +340,7 @@ funciona; `cargo build --locked` produz o mesmo resultado com e sem `.cargo/conf
 
 **Arquivos:** `integrations/claude-code/README.md`.
 
-- [ ] Subseção "Rolling back a version" depois de "Publishing a version", com a sequência do
+- [x] Subseção "Rolling back a version" depois de "Publishing a version", com a sequência do
   lado do mantenedor e do lado do usuário:
   - mantenedor: reverter o `checksums.txt` e a versão do `plugin.json` para a tag anterior
     (`tests/plugin.rs` exige `plugin_version_equals_the_pinned_release` e
@@ -350,7 +350,7 @@ funciona; `cargo build --locked` produz o mesmo resultado com e sem `.cargo/conf
   - o que **não** volta sozinho: quem configurou a opção `binary` do plugin, ou tem outro
     `ripwire-broker` no `PATH`, continua no binário escolhido (`scripts/broker`, linha 39: a
     opção vence o pin). Dizer como conferir qual executável está em uso (`doctor`).
-- [ ] Store de memória com esquema desconhecido. `memory forget --all` **não** é a saída:
+- [x] Store de memória com esquema desconhecido. `memory forget --all` **não** é a saída:
   `forget_everything` (`src/memory/store.rs`, linha 773) revoga a coleta e apaga as pendências,
   mas depois chama `self.load()`, que devolve `UnknownSchema`; o comando falha e o snapshot
   fica. Documentar o que funciona: usar um binário que entenda o esquema; ou, com o servidor e
@@ -358,7 +358,8 @@ funciona; `cargo build --locked` produz o mesmo resultado com e sem `.cargo/conf
   Hoje só existe `SCHEMA_VERSION = 1`, então isso é preparo para a primeira mudança de esquema,
   não um incidente possível agora.
 - [ ] Se o ensaio mostrar que falta um comando para descartar um store ilegível, abrir issue;
-  é mudança de produto e fica fora deste plano.
+  é mudança de produto e fica fora deste plano. O ensaio mostrou que falta (D-200); abrir a
+  issue é do mantenedor, com o texto que está no D-200.
 
 **Aceitação:** ensaio de ponta a ponta numa instalação real do plugin, sem publicar nada:
 instalar a versão atual, aplicar o rollback num marketplace local (`--plugin-dir` ou um clone),
