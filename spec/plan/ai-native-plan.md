@@ -6,6 +6,10 @@ aplicáveis).
 Status: **planejado; nada implementado**. Revisado pelo Codex em 2026-11-14: 14 achados, todos
 conferidos no código e incorporados (ver [Revisão adversarial](#revisão-adversarial)).
 Decisão: [D-189](../changelog.md#d-189--plano-de-prontidão-para-agentes-revisado-pelo-codex).
+Conferido contra a árvore antes da execução em 2026-11-14
+([D-193](../changelog.md#d-193--o-plano-ai-native-conferido-contra-a-árvore-antes-da-execução)):
+o alvo `plugin` usa o `claude` fixado via `npx`, a conferência de hashes fica fora do script, a
+etapa 10 foi ajustada ao estado atual das skills, e cada grupo sai numa branch própria.
 
 ## Objetivo e limites
 
@@ -43,6 +47,19 @@ tomada na execução vira uma entrada `D-NNN` em [`spec/changelog.md`](../change
 - As etapas 1 e 2 saem na mesma PR: a lista da 2 é uma seção do arquivo da 1.
 - A etapa 4 é só documentação (risco aceito, D-192) e sai junto com a 1 e a 2.
 - A etapa 3 acrescenta um verificador ao comando da etapa 6; ela fecha o comando único.
+
+## Como cada grupo é executado (D-193)
+
+- Uma branch por grupo, empilhadas: 6; 1+2+4; 3; 5; 7; 8; 9; 10. O agente commita; push, PR e
+  mescla são do mantenedor.
+- TDD: o teste de um item de documentação ou YAML é um teste Rust em `tests/` que lê o arquivo
+  (como `tests/plugin.rs` faz com o `release.yml`); o do `check.sh` é um harness bash com
+  ferramentas falsas no `PATH`.
+- Ao fim de cada grupo: revisão adversarial pelo Codex e pelo Grok em paralelo; cada achado é
+  conferido no código, vira um teste vermelho, e só então é corrigido; a skill `rust-review`
+  passa sobre o diff Rust do grupo.
+- Nas etapas 3 e 5, o que é do mantenedor (configuração do GitHub, ensaio de push, release real)
+  fica como pendência explícita no fim do grupo.
 
 ## Fase A — prioridade alta
 
@@ -214,7 +231,8 @@ barra um agente que decida, ou seja induzido a, aprovar e publicar.
   (`the_release_workflow_publishes_what_install_binary_downloads`): rodar e ajustar se a chave
   nova quebrar a leitura; acrescentar uma asserção de que o job `draft` declara
   `environment: release`, para o portão não sumir numa edição.
-- [ ] Verificação do `checksums.txt` por máquina, como defesa adicional e não como substituta
+- [ ] Verificação do `integrations/claude-code/scripts/checksums.txt` por máquina, num passo do
+  YAML e fora do `check.sh` (depende do diff da PR e da rede; D-193), como defesa adicional e não como substituta
   da revisão: um passo no job `default` que, quando o arquivo muda, baixa o `SHA256SUMS` do
   release da tag da primeira linha e compara linha a linha. Um hash que não veio de um release
   publicado falha.
@@ -249,12 +267,13 @@ do próprio dono. Volta à mesa se houver um segundo mantenedor.
   - `default`: `cargo fmt --all --check`; clippy `-D warnings`; `cargo nextest run --locked`;
     `props` com `PROPTEST_CASES=4096`; `props_fs`; o portão do CA-10; a guarda de fixtures;
   - `online`: clippy e nextest com `--features online`;
-  - `plugin`: os dois `claude plugin validate --strict` e o `claude plugin test`;
+  - `plugin`: os dois `claude plugin validate --strict` e o `claude plugin test`, com o `claude`
+    na versão lida do `rust.yml`, via `npx -y @anthropic-ai/claude-code@<versão>` (D-193: o
+    validador mais novo reprova o plugin com avisos que o fixado não emite);
   - `secrets`: o gitleaks (entra na etapa 3);
   - `all` (padrão): **os quatro**. É o que "tudo" quer dizer: tudo o que o CI roda numa PR.
-- [ ] `all` falha, com a instrução de instalação, quando falta uma ferramenta (`cargo-nextest`,
-  que hoje não está instalado na máquina do mantenedor; `claude` na versão fixada no
-  `rust.yml`; `gitleaks`). Não cai para `cargo test` nem pula alvos em silêncio.
+- [ ] `all` falha, com a instrução de instalação, quando falta uma ferramenta (`cargo-nextest`;
+  `npx`, que baixa o `claude` fixado; `gitleaks`). Não cai para `cargo test` nem pula alvos em silêncio.
 - [ ] Rodar um alvo isolado é permitido e termina com uma linha explícita: "cobertura parcial:
   rodou X; não rodou Y, Z". Só `all` imprime "todas as verificações de PR passaram".
 - [ ] Avisar quando o `ripwire` não está no `PATH`: sem ele os testes e2e retornam cedo e passam
@@ -342,9 +361,10 @@ documentado recupera. `scripts/check.sh all` verde no branch do rollback.
 
 **Arquivos:** `.claude/skills/` (versionar), `skills-lock.json`, `.gitignore`.
 
-- [ ] Decidir o que fazer com as três cópias não versionadas do `aine-readiness-analyzer`
-  (`.claude/`, `.agents/`, `.grok/`) e o `skills-lock.json`. Proposta: versionar
-  `.claude/skills/` e o lock; ignorar `.agents/` e `.grok/` no `.gitignore`.
+- [ ] ~~Decidir o que fazer com as cópias do `aine-readiness-analyzer`~~ Feito antes da execução:
+  as skills vendorizadas moram em `.agents/skills/`, com symlinks em `.claude/skills/` e
+  `.grok/skills/`, e o `skills-lock.json` fixa a origem (739bdbe, 298d0e3, 483e188). Não ignorar
+  `.agents/`: os links quebrariam. As skills próprias desta etapa seguem o mesmo arranjo.
 - [ ] `decision-entry`: acrescenta a linha no índice e a seção `## D-NNN` em
   `spec/changelog.md`, com a data de `date`. Antes, acertar o índice: o D-188 não tem linha
   nele, e o bloco do D-182 ao D-187 está em ordem decrescente dentro do trecho que a convenção

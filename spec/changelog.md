@@ -128,6 +128,7 @@
 | 2026-11-14 11:15 | O agente trabalha por uma conta de máquina com fork (opção A da etapa 4 do plano AI-native), escolha do usuário: sem permissão no repositório principal, PRs a partir do fork, e só o mantenedor mescla, cria tags e publica | [D-190](#d-190--o-agente-trabalha-por-uma-conta-de-máquina-com-fork) |
 | 2026-11-14 11:30 | Substitui o D-190: o usuário trocou a opção A pela B. O agente fica sem credencial do GitHub; faz commits locais e o mantenedor empurra, abre a PR, mescla e publica | [D-191](#d-191--o-agente-fica-sem-credencial-do-github-opção-b) |
 | 2026-11-14 11:32 | Substitui o D-190 e o D-191: as sessões de agente continuam com o login do mantenedor ao alcance, sem isolamento; risco aceito. Os itens de credenciais e de humano no caminho da auditoria AINE seguem reprovados por decisão | [D-192](#d-192--credencial-do-agente-risco-aceito) |
+| 2026-11-14 12:30 | Conferência do plano AI-native contra a árvore antes de executar: referências corretas, mas o alvo `plugin` falha no `--strict` com o Claude Code local (2.1.325; o CI fixa 2.1.292), o `checksums.txt` está em `integrations/claude-code/scripts/`, e a etapa 10 partia de um estado de skills que mudou. Decisões: o `check.sh` roda o `claude` fixado via `npx`; a conferência de hashes fica no YAML, fora do script; uma branch por grupo; as skills `rust-*` versionadas à parte; TDD de docs e YAML por testes que leem os arquivos e por um harness bash com ferramentas falsas | [D-193](#d-193--o-plano-ai-native-conferido-contra-a-árvore-antes-da-execução) |
 | 2026-10-11 15:20 | Etapa 3 da T5.3 (Codex 0.161.0, `gpt-6.1-sol`): rodada de 60 sessões **inconclusiva**. 16 sessões morreram no limite de uso da conta e 9 foram invalidadas pelo guarda de contaminação; sobraram 35 válidas e 4 pares com histórico relevante (tokens B/A 0,94, IC 0,65 a 1,04). Dois achados do instrumento: o guarda marca `cat ~/.agents/skills/ripwire-*/SKILL.md` e `command -v graft` como ferramenta de contexto, e o Codex lê as skills do usuário mesmo com `--ignore-user-config` | [D-187](#d-187--etapa-3-da-t53-a-rodada-do-codex-parou-no-limite-de-uso) |
 | 2026-10-11 14:10 | Etapa 2 da T5.3: rodada completa no `ceci_app`, 13 sequências (30 sessões), braços A, B e C, 3 repetições, 270 sessões, US$ 94,24. Acerto na última sessão: A 34/37, B 37/37, C 32/34. Tokens com histórico relevante, mediana contra A: B 0,99 (IC 0,87 a 1,07), C 0,89 (IC 0,82 a 1,02). O braço B entregou a memória em 21 de 43 leituras (17 recusadas pelo classificador, 5 obsoletas); com entrega, 0,92. Latência de `context_for_task` sem piora. Cache quente: a leitura de memória não tem cache (B/A 6,9 na chamada repetida). Uma nota com muitas fontes passa da parte da memória e é cortada. **`--memory` não é promovido** | [D-186](#d-186--etapa-2-da-t53-o-braço-b-não-passa-no-gate-de-custo-o-classificador-recusa-metade-das-leituras) |
 | 2026-10-11 10:30 | O `ripwire-eval` passa a medir o Codex, em TDD: lê o transcript de `codex exec --json` com as mesmas contagens e os mesmos motivos de invalidez, e entrega o braço na linha de comando (`{codex_mcp}` vira os `-c mcp_servers.…` do braço). O registro de cada sessão ganha `memory_stop_reasons`, o `stop_reason` de cada leitura de memória | [D-185](#d-185--o-ripwire-eval-mede-o-codex-e-leva-o-stop_reason-da-leitura-ao-registro) |
@@ -8983,3 +8984,46 @@ login.
 
 **Reabrir se** entrar um segundo mantenedor, o plugin ganhar usuários em número relevante, ou as
 sessões passarem a rodar sem supervisão.
+
+## D-193 — O plano AI-native conferido contra a árvore antes da execução
+
+**Contexto.** Antes de começar pela etapa 6, o [plano](plan/ai-native-plan.md) foi conferido
+contra o repositório (HEAD `298d0e3`). Todas as referências de linha e arquivo batem
+(`src/lib.rs` 5–9, `src/memory/store.rs` 773, `scripts/broker` 39 e 104, `handoff.md` 160 e 326,
+os três testes de `tests/plugin.rs`, os jobs `gates` e `draft` do `release.yml`). O job `default`
+leva ~2,5 min no CI, então o timeout de 12 min no passo único (etapa 6) sobra.
+
+**O que não batia.**
+
+- `claude plugin validate --strict integrations/claude-code` falha com o Claude Code instalado
+  na máquina do mantenedor (2.1.325): o validador novo trata como aviso o import com extensão
+  `.ts` nos `tests/*.test.ts` (TS5097). O CI fixa 2.1.292 e passa. Sem decisão, `check.sh all`
+  nunca ficaria verde localmente.
+- O `checksums.txt` está em `integrations/claude-code/scripts/checksums.txt`, não na raiz do
+  plugin.
+- A etapa 5 punha a conferência de hashes direto no YAML do `default`; a etapa 6 diz que o script
+  é a fonte dos passos do CI.
+- A etapa 10 propunha ignorar `.agents/` e `.grok/`, mas o `aine-readiness-analyzer` já está
+  versionado em `.agents/skills/` (739bdbe), e `.claude/skills/` e `.grok/skills/` são symlinks
+  para lá: ignorar `.agents/` quebraria os links.
+- `cargo-nextest` e `gitleaks` não estavam instalados (agora estão, via brew: 0.9.152 e 8.30.1).
+- As etapas 3 e 5 têm partes que só o mantenedor executa (secret scanning e push protection,
+  environment `release`, ensaio de push, próximo release real); esses grupos terminam com a
+  aceitação pendente com ele. O ensaio da etapa 9 escreve em `~/.claude` e pede confirmação.
+
+**Decisões do usuário.**
+
+- O alvo `plugin` do `check.sh` roda o `claude` na versão lida do `rust.yml`, via
+  `npx -y @anthropic-ai/claude-code@<versão>`: o mesmo validador do CI, sem mexer no plugin.
+- A conferência de hashes do `checksums.txt` (etapa 5) fica no YAML, fora do script: depende do
+  diff da PR e da rede.
+- Uma branch por grupo de etapas (6; 1+2+4; 3; 5; 7; 8; 9; 10), empilhadas; push, PR e mescla
+  são do mantenedor.
+- As skills `rust-best-practices`, `rust-port` e `rust-review` versionadas já, num commit à parte
+  (483e188), no mesmo arranjo do `aine-readiness-analyzer`.
+
+**Como cada grupo é feito.** TDD: para itens de documentação e YAML, o teste é um teste Rust em
+`tests/` que lê o arquivo (como `tests/plugin.rs` já faz com o `release.yml`); para o
+`check.sh`, um harness bash com `cargo` e `claude` falsos no `PATH`, sem rodar cargo dentro do
+cargo. Ao fim de cada grupo, revisão adversarial em paralelo pelo Codex e pelo Grok, cada achado
+conferido no código antes de virar teste, e a skill `rust-review` sobre o diff Rust do grupo.
