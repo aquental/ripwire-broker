@@ -9671,9 +9671,9 @@ ele fixa a origem das que vêm de fora, e estas nascem aqui.
   passa a citar o D novo. Esta entrada foi escrita seguindo a skill;
 - **`release`:** a ordem de "Publishing a version". Ela prepara a versão no `Cargo.toml`, os
   portões e, depois do release publicado, o `checksums.txt` e o `plugin.json` lidos do
-  `SHA256SUMS`, e o texto da PR. Para na tag, na aprovação do environment `release`, na PR e
-  mescla, e em criar ou editar um release. Ela teria como fazer tudo isso (D-192): a parada é regra
-  da skill;
+  `SHA256SUMS`, e o texto da PR. Para na tag, na aprovação do environment `release`, na edição dos
+  pins do plugin (que espera o sim do mantenedor), na PR e mescla, e em criar ou editar um release.
+  Ela teria como fazer tudo isso (D-192): a parada é regra da skill;
 - **`audit-rust`:** o `spec/prompt/auditoria-rust.md`, palavra por palavra, como skill invocável.
   O arquivo antigo virou um ponteiro, para não haver duas cópias.
 
@@ -9706,4 +9706,33 @@ Agora elas têm a hora do commit que trouxe cada seção. A skill diz para nunca
 - a auditoria mora num lugar só;
 - o índice tem uma linha por seção, do D-001 ao último, em ordem, e a convenção do handoff diz
   "crescente".
+
+**Revisão adversarial** (Codex, Antigravity e o `rust-review`; o Grok rodava à parte). Cada mutante
+foi rodado com um alvo de compilação próprio. Válidos, em TDD:
+
+- **a `release` se autorizava a editar o plugin (alta; achado do Codex).** O passo que escreve o
+  `checksums.txt` e o `plugin.json` dizia que o mantenedor já tinha aprovado ao pedir o release. A
+  lista "Ask before" pede o mantenedor antes de qualquer edição em `integrations/claude-code/`, e o
+  teste não via, porque só procurava comandos. Agora os pins estão na seção de parada e esperam o
+  sim, e o teste procura também os caminhos e os outros efeitos da lista: `integrations/claude-code/`,
+  `.claude-plugin/`, `--jev-probe`, `online_live`, `ripwire-eval run`, `gh pr create`, `rust.yml`,
+  `deny.toml` e `.gitleaks`. Com isso, o item do plano "nenhuma skill executa algo da lista sem
+  parar" passou a ser verdade;
+- **a seção de parada só precisava citar a lista.** Uma seção que mandava executar tudo sem
+  perguntar passava, e um `### ` depois dela escondia comandos. Agora ela tem de dizer "does not
+  run", não pode dizer que executa, e termina no próximo título de qualquer nível;
+- **o conteúdo da auditoria não era protegido.** Os doze itens e a saída podiam sumir, e o
+  ponteiro antigo podia guardar uma segunda cópia parcial. Agora o teste exige os quatro blocos e
+  os doze itens na skill, e um ponteiro curto, sem nenhum bloco;
+- **o índice:** as datas, as âncoras, linhas malformadas e a ordem das seções no corpo não eram
+  conferidas. Agora cada linha tem de ser `| AAAA-MM-DD HH:MM | … | [D-NNN](#âncora) |`, a âncora
+  tem de ser a do título da própria seção, e as seções seguem em ordem (a única exceção é o D-102
+  antes do D-101);
+- **a lista de skills era fixa no teste.** Agora as próprias são as pastas de `.agents/skills/` que
+  o `skills-lock.json` não fixa a uma origem de fora, e um teste diz que são as três do plano;
+- **o resto:** um front matter sem fechamento passava; a `release` podia perder o texto da PR, e a
+  `decision-entry` o "fim do arquivo", porque a `description` repetia as palavras (agora o teste lê
+  só o corpo); a âncora dizia "pontuação removida", mas o GitHub mantém `-` e `_`; o plano e o
+  mapa do handoff não citavam os arquivos novos; e, do `rust-review`, os auxiliares de Markdown
+  agora são `tests/common/markdown.rs` e o arquivo declara `#![cfg(unix)]`.
 

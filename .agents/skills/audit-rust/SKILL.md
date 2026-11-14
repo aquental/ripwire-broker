@@ -69,5 +69,6 @@ SAÍDA, POR ACHADO
 Feche com: top 5 por impacto em produção, o que só cargo tree / clippy / teste podem fechar, e o que não refatorar agora.
 ## Where it stops
 
-A auditoria só lê e propõe: não edita arquivo, não roda nada da lista `AGENTS.md` "Ask before".
-Um achado que pede `cargo tree` ou outra prova pede o comando ao usuário em vez de afirmar.
+The audit reads and proposes: it edits no file, and it does not run anything from the list in
+`AGENTS.md` "Ask before". A finding that needs `cargo tree` or another proof asks the user for the
+command instead of asserting.

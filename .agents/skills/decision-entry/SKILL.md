@@ -19,8 +19,8 @@ decided, why, what was rejected and how it is tested.
    `grep -o '^## D-[0-9]*' spec/changelog.md | tail -1`.
 2. **The date and time, now:** `date '+%Y-%m-%d %H:%M'`. Never invent or round it.
 3. **The title,** in Portuguese, as a sentence that states the decision:
-   `## D-NNN — <título>`. Its anchor is what GitHub makes of it: lowercase, punctuation
-   dropped, each space a hyphen, so `## D-201 — Um título, curto` is `#d-201--um-título-curto`
+   `## D-NNN — <título>`. Its anchor is what GitHub makes of it: lowercase, every punctuation
+   mark other than `-` and `_` dropped, each space a hyphen, so `## D-201 — Um título, curto` is `#d-201--um-título-curto`
    (the dash between number and title leaves two hyphens).
 4. **The index row,** at the end of the index: after the last `| 20…` row, before the first
    `## ` heading. One line, in Portuguese:
@@ -38,7 +38,7 @@ decided, why, what was rejected and how it is tested.
 
 ## Where it stops
 
-This skill only edits `spec/changelog.md` and, when step 6 applies, `handoff.md`. It runs nothing
-from the list in `AGENTS.md` "Ask before": it never runs `git push`, never creates a `git tag` or a
-release, never merges. Committing the entry with the work it explains is fine; what happens to the
+This skill only edits `spec/changelog.md` and, when step 6 applies, `handoff.md`. It does not run
+anything from the list in `AGENTS.md` "Ask before": no `git push`, no `git tag`, no release, no
+merge. Committing the entry with the work it explains is fine; what happens to the
 commit afterwards is the maintainer's.

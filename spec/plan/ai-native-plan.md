@@ -372,7 +372,9 @@ documentado recupera. `scripts/check.sh all` verde no branch do rollback.
 
 ### 10. Skills versionadas
 
-**Arquivos:** `.claude/skills/` (versionar), `skills-lock.json`, `.gitignore`.
+**Arquivos:** `.claude/skills/` (versionar), `skills-lock.json`, `.gitignore`. Na execução
+(D-201): `.agents/skills/`, `.claude/skills/`, `.grok/skills/`, `spec/prompt/auditoria-rust.md`,
+`spec/changelog.md` e `tests/skills.rs`; o `skills-lock.json` e o `.gitignore` não mudaram.
 
 - [ ] ~~Decidir o que fazer com as cópias do `aine-readiness-analyzer`~~ Feito antes da execução:
   as skills vendorizadas moram em `.agents/skills/`, com symlinks em `.claude/skills/` e

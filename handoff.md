@@ -112,6 +112,9 @@ cargo lint                  # o clippy do job default (alias em .cargo/config.to
   e comandos citados.
 - **`scripts/check.sh` e `.cargo/config.toml`:** o comando único dos checks de PR e os aliases
   `cargo lint`/`lint-online` (D-194); `tests/check_script.rs` o testa com ferramentas falsas.
+- **`.agents/skills/`:** as skills do repositório (`decision-entry`, `release`, `audit-rust`) e as
+  vendorizadas, com links em `.claude/skills/` e `.grok/skills/`; `tests/skills.rs` confere que
+  cada skill própria para onde a lista "Ask before" manda, e o índice do changelog (D-201).
 - **`scripts/plugin-surface.sh`:** o passo de PR que avisa quando o plugin muda e confere os
   hashes fixados contra o release (D-197); `tests/plugin_surface.rs` o testa com `git` e `gh`
   falsos. `tests/common/workflow.rs` lê os workflows por linha, sem comentários, para os testes.
