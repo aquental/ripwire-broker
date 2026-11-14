@@ -129,6 +129,7 @@
 | 2026-11-14 11:30 | Substitui o D-190: o usuário trocou a opção A pela B. O agente fica sem credencial do GitHub; faz commits locais e o mantenedor empurra, abre a PR, mescla e publica | [D-191](#d-191--o-agente-fica-sem-credencial-do-github-opção-b) |
 | 2026-11-14 11:32 | Substitui o D-190 e o D-191: as sessões de agente continuam com o login do mantenedor ao alcance, sem isolamento; risco aceito. Os itens de credenciais e de humano no caminho da auditoria AINE seguem reprovados por decisão | [D-192](#d-192--credencial-do-agente-risco-aceito) |
 | 2026-11-14 12:30 | Conferência do plano AI-native contra a árvore antes de executar: referências corretas, mas o alvo `plugin` falha no `--strict` com o Claude Code local (2.1.325; o CI fixa 2.1.292), o `checksums.txt` está em `integrations/claude-code/scripts/`, e a etapa 10 partia de um estado de skills que mudou. Decisões: o `check.sh` roda o `claude` fixado via `npx`; a conferência de hashes fica no YAML, fora do script; uma branch por grupo; as skills `rust-*` versionadas à parte; TDD de docs e YAML por testes que leem os arquivos e por um harness bash com ferramentas falsas | [D-193](#d-193--o-plano-ai-native-conferido-contra-a-árvore-antes-da-execução) |
+| 2026-11-14 13:40 | Etapa 6 do plano AI-native, em TDD: `scripts/check.sh [all\|default\|online\|plugin]` passa a ser a fonte dos passos do CI; os jobs `default`, `online` e `plugin` só o chamam, com os nomes intactos. `all` recusa começar se faltar `cargo-nextest`, `npx` ou `ripwire`; um alvo isolado termina com "partial coverage". Achado no caminho: as guardas por `grep` passavam quando o próprio `grep` falhava; agora falham fechado. O `claude` fixado (2.1.292) mora no script e roda pelo `npx`, com o postinstall liberado para o npm 12 | [D-194](#d-194--um-comando-roda-tudo-o-que-o-ci-roda-numa-pr) |
 | 2026-10-11 15:20 | Etapa 3 da T5.3 (Codex 0.161.0, `gpt-6.1-sol`): rodada de 60 sessões **inconclusiva**. 16 sessões morreram no limite de uso da conta e 9 foram invalidadas pelo guarda de contaminação; sobraram 35 válidas e 4 pares com histórico relevante (tokens B/A 0,94, IC 0,65 a 1,04). Dois achados do instrumento: o guarda marca `cat ~/.agents/skills/ripwire-*/SKILL.md` e `command -v graft` como ferramenta de contexto, e o Codex lê as skills do usuário mesmo com `--ignore-user-config` | [D-187](#d-187--etapa-3-da-t53-a-rodada-do-codex-parou-no-limite-de-uso) |
 | 2026-10-11 14:10 | Etapa 2 da T5.3: rodada completa no `ceci_app`, 13 sequências (30 sessões), braços A, B e C, 3 repetições, 270 sessões, US$ 94,24. Acerto na última sessão: A 34/37, B 37/37, C 32/34. Tokens com histórico relevante, mediana contra A: B 0,99 (IC 0,87 a 1,07), C 0,89 (IC 0,82 a 1,02). O braço B entregou a memória em 21 de 43 leituras (17 recusadas pelo classificador, 5 obsoletas); com entrega, 0,92. Latência de `context_for_task` sem piora. Cache quente: a leitura de memória não tem cache (B/A 6,9 na chamada repetida). Uma nota com muitas fontes passa da parte da memória e é cortada. **`--memory` não é promovido** | [D-186](#d-186--etapa-2-da-t53-o-braço-b-não-passa-no-gate-de-custo-o-classificador-recusa-metade-das-leituras) |
 | 2026-10-11 10:30 | O `ripwire-eval` passa a medir o Codex, em TDD: lê o transcript de `codex exec --json` com as mesmas contagens e os mesmos motivos de invalidez, e entrega o braço na linha de comando (`{codex_mcp}` vira os `-c mcp_servers.…` do braço). O registro de cada sessão ganha `memory_stop_reasons`, o `stop_reason` de cada leitura de memória | [D-185](#d-185--o-ripwire-eval-mede-o-codex-e-leva-o-stop_reason-da-leitura-ao-registro) |
@@ -9027,3 +9028,40 @@ leva ~2,5 min no CI, então o timeout de 12 min no passo único (etapa 6) sobra.
 `check.sh`, um harness bash com `cargo` e `claude` falsos no `PATH`, sem rodar cargo dentro do
 cargo. Ao fim de cada grupo, revisão adversarial em paralelo pelo Codex e pelo Grok, cada achado
 conferido no código antes de virar teste, e a skill `rust-review` sobre o diff Rust do grupo.
+
+## D-194 — Um comando roda tudo o que o CI roda numa PR
+
+**Contexto.** Etapa 6 do [plano AI-native](plan/ai-native-plan.md): a auditoria reprovou "scripts
+de tarefa", "scripts nomeados" e "um comando que roda tudo". Os passos do CI moravam só no
+`rust.yml`, e rodá-los localmente pedia copiar oito comandos.
+
+**Decisão.** `scripts/check.sh [all|default|online|plugin]` tem os passos, na ordem do CI, e os
+três jobs do `rust.yml` só o chamam (`run: scripts/check.sh <job>`), com os nomes `default`,
+`online` e `plugin` intactos (D-107). O CI continua instalando o nextest e o `ripwire` (D-188)
+antes; o script imprime um `::group::` por verificação e o passo único herda o timeout de 12 min
+(D-144; o job `default` leva ~2,5 min). `.cargo/config.toml` só com os aliases `lint` e
+`lint-online`.
+
+- `all` (o padrão) recusa começar, dizendo o que instalar, quando falta `cargo`,
+  `cargo-nextest`, `npx` ou `ripwire`. Sem o `ripwire`, os testes e2e passariam vazios
+  (`require_ripwire!`). Um alvo isolado roda, avisa se faltar o `ripwire`, e termina com
+  "partial coverage: ran X; did not run Y"; só `all` imprime "all PR checks passed".
+- O Claude Code que valida o plugin está fixado no script (`CLAUDE_CODE_VERSION=2.1.292`) e roda
+  pelo `npx`, não o instalado (D-193). O npm 12 só roda scripts de instalação de pacotes da lista
+  `allow-scripts`, e sem o postinstall o pacote fica sem o binário nativo; o script exporta
+  `npm_config_allow_scripts=@anthropic-ai/claude-code`, que o npm mais antigo ignora.
+
+**Achado no caminho.** As duas guardas por `grep` (CA-10 e fixtures sintéticas) usavam
+`if grep …`, que lê "erro" (saída 2) como "nada encontrado" (saída 1): com o `grep` quebrado ou
+ausente, a guarda passava sem provar nada. O mesmo padrão estava no `rust.yml`. Agora o status é
+lido e só 1 passa.
+
+**Como foi testado.** `tests/check_script.rs` dirige o script com ferramentas falsas num `PATH`
+selado (14 testes: ordem dos passos, alvo isolado, ferramenta ausente, `ripwire` ausente, falha
+de um passo, CA-10, `grep` com erro, grupos de log, jobs do CI chamando o script, aliases). As
+mutações da aceitação, com as ferramentas reais: um `println!` em `src/budget.rs` falha no clippy
+(`print_stdout`); uma asserção invertida falha no nextest com o nome do teste; `reqwest` não
+opcional falha já no passo de testes, pelo `the_build_has_no_network_stack`, antes de chegar ao
+portão do CA-10 (que, conferido à parte, também pegaria: 17 linhas de crates de rede no
+`cargo tree`). `cargo build --locked` dá o mesmo binário com e sem `.cargo/config.toml`.
+`scripts/check.sh all` verde na máquina do mantenedor.

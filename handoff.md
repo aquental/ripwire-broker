@@ -45,19 +45,20 @@ O código não tem `TODO`/`FIXME`. As pendências moram no PRD (§19, §21, §23
 ## Como verificar
 
 ```sh
-cargo test --all-targets                    # 840 testes, 5 ignorados (opt-in)
-cargo test --all-targets --features online  # 877 testes, 8 ignorados
-cargo clippy --all-targets -- -D warnings   # também com --features online
-cargo fmt --check
-claude plugin validate --strict integrations/claude-code   # o plugin
-claude plugin validate --strict .                          # o marketplace
-claude plugin test integrations/claude-code                # o mod: 46 testes, sem sessão nem rede
+scripts/check.sh            # tudo o que o CI roda numa PR: default, online e plugin, na ordem do CI
+scripts/check.sh default    # um alvo só (também online, plugin): termina com "partial coverage"
+cargo lint                  # o clippy do job default (alias em .cargo/config.toml); também lint-online
 ```
 
-- **CI** (`.github/workflows/rust.yml`): dois jobs, `default` e `online`, obrigatórios no `master`.
-  Também cobre a porta do CA-10 (nenhum crate de rede no build padrão), a guarda de fixtures
-  sintéticas e as propriedades. Um terceiro, `plugin`, não obrigatório, instala o Claude Code
-  2.1.292 pelo npm e roda as três linhas `claude plugin` acima.
+- O script recusa começar se faltar ferramenta (`cargo-nextest`, `npx`, `ripwire`) e diz o que
+  instalar. Sem o `ripwire` no `PATH`, os testes e2e retornam cedo e passam sem testar nada
+  (`require_ripwire!`): em `all` isso é falha; num alvo isolado, aviso e cobertura parcial.
+- O alvo `plugin` roda o Claude Code fixado no script (`CLAUDE_CODE_VERSION`, 2.1.292) pelo `npx`,
+  não o instalado: o validador mais novo reprova o plugin com avisos que o fixado não emite (D-193).
+- **CI** (`.github/workflows/rust.yml`): os jobs `default`, `online` e `plugin` chamam
+  `scripts/check.sh default|online|plugin`; os passos moram no script. `default` e `online` são
+  obrigatórios no `master`; `plugin` não. O CI instala o `ripwire` (última release, D-188) e o
+  nextest antes de chamar o script.
 - **Release** (`.github/workflows/release.yml`, D-160): só numa tag `v*` igual à versão do
   `Cargo.toml`. Chama o `rust.yml`, compila os quatro alvos e publica tarballs e `SHA256SUMS`. A
   ordem de publicar uma versão está no README do plugin ("Publishing a version"): os hashes entram

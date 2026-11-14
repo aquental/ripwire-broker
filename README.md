@@ -964,6 +964,15 @@ cargo build --release
 
 ## Tests
 
+`scripts/check.sh` runs every check a pull request runs, in CI's order: formatting, clippy, the
+tests, the property tests, the CA-10 gate and the fixture guard (`default`), the `online` build,
+and the plugin (`plugin`, with the Claude Code version pinned in the script, through `npx`). It
+refuses to start when `cargo-nextest`, `npx` or `ripwire` is missing. `scripts/check.sh default`
+runs one target and ends by saying what it did not run. `cargo lint` and `cargo lint-online` are
+the two clippy runs. `cargo deny` stays scheduled, outside PRs.
+
+The commands underneath, and the opt-in ones:
+
 ```sh
 cargo test                 # core, hooks, notes, CLI and the A/B instrument (fixtures), MCP e2e and upstream against the real ripwire
 cargo test --features online   # also the HTTP client against a local fixture server
