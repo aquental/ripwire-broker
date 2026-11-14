@@ -268,7 +268,8 @@ do próprio dono. Volta à mesa se houver um segundo mantenedor.
     `props` com `PROPTEST_CASES=4096`; `props_fs`; o portão do CA-10; a guarda de fixtures;
   - `online`: clippy e nextest com `--features online`;
   - `plugin`: os dois `claude plugin validate --strict` e o `claude plugin test`, com o `claude`
-    na versão lida do `rust.yml`, via `npx -y @anthropic-ai/claude-code@<versão>` (D-193: o
+    na versão fixada em `CLAUDE_CODE_VERSION` no próprio script, via
+    `npx -y @anthropic-ai/claude-code@<versão>` (D-193: o
     validador mais novo reprova o plugin com avisos que o fixado não emite);
   - `secrets`: o gitleaks (entra na etapa 3);
   - `all` (padrão): **os quatro**. É o que "tudo" quer dizer: tudo o que o CI roda numa PR.

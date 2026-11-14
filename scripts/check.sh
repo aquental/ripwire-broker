@@ -76,19 +76,25 @@ fi
 # --- running -----------------------------------------------------------------------------------
 
 step() { # title, command...
-    local title=$1
+    local title=$1 status=0
     shift
     if [ "${GITHUB_ACTIONS:-}" = true ]; then
         echo "::group::$title"
     else
         echo "==> $title"
     fi
-    "$@"
+    # The group is closed even when the check fails, so its log stays readable; then the failure
+    # stops the run (set -e) with the check's own exit status.
+    "$@" || status=$?
     if [ "${GITHUB_ACTIONS:-}" = true ]; then
         echo "::endgroup::"
     fi
+    return "$status"
 }
 
+# The gates below run inside `step`'s `|| status=$?`, where bash ignores set -e for everything
+# they call: each failure returns explicitly.
+#
 # A gate that greps for something that must not be there. grep exits 1 on no match and 2 on an
 # error; both read as "nothing found" under `if grep`, so an error is told apart and fails.
 must_not_match() { # what (for the error), then grep's arguments
@@ -112,9 +118,9 @@ must_not_match() { # what (for the error), then grep's arguments
 # (tests/mcp_surface.rs).
 no_network_stack() {
     local tree
-    tree=$(cargo tree --locked -e normal)
+    tree=$(cargo tree --locked -e normal) || return
     must_not_match "a network crate reached the default build (CA-10)" \
-        -Ei 'reqwest|secrecy|rustls|hyper' <<< "$tree"
+        -Ei 'reqwest|secrecy|rustls|hyper' <<< "$tree" || return
     echo "no network crate in the default dependency graph"
 }
 
@@ -122,7 +128,7 @@ no_network_stack() {
 # enters the repository. Every fixture is synthetic.
 fixtures_stay_synthetic() {
     must_not_match "a fixture above looks like it carries a credential" \
-        -rEinl 'Bearer |api_key|authorization|sk-[A-Za-z0-9]{10}' tests/fixtures/
+        -rEinl 'Bearer |api_key|authorization|sk-[A-Za-z0-9]{10}' tests/fixtures/ || return
     echo "no credential-shaped string in tests/fixtures/"
 }
 

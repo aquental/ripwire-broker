@@ -9065,3 +9065,26 @@ opcional falha já no passo de testes, pelo `the_build_has_no_network_stack`, an
 portão do CA-10 (que, conferido à parte, também pegaria: 17 linhas de crates de rede no
 `cargo tree`). `cargo build --locked` dá o mesmo binário com e sem `.cargo/config.toml`.
 `scripts/check.sh all` verde na máquina do mantenedor.
+
+**Revisão adversarial** (Codex 0.169.0 e Grok 1.0.77, em paralelo, cada achado conferido no
+código; mais a skill `rust-review` sobre `tests/check_script.rs`). Nenhum defeito de execução no
+script, no bash 3.2 nem no 5, e nenhum passo, flag ou variável do CI antigo perdido. Válidos e
+tratados em TDD, cada teste mostrado vermelho contra o mutante correspondente:
+
+- os testes das guardas por `grep` passavam pelo título do passo, que contém "CA-10": agora há um
+  teste por guarda, que confere o texto do `::error::`; e uma fixture com `api_key` numa cópia da
+  árvore prova que a guarda das fixtures roda;
+- `cargo tree` com erro precisa falhar o CA-10, não ler um grafo vazio (teste novo);
+- um passo que falhava deixava o `::group::` aberto. A correção (`"$@" || status=$?`) expôs a
+  armadilha que os testes novos pegaram: nesse contexto o bash ignora o `set -e` em tudo o que a
+  guarda chama, e as guardas saíam 0 depois de falhar. Cada falha dentro delas agora retorna
+  explicitamente;
+- a conferência dos jobs do CI agora é bloco a bloco (trocar os `run:` entre jobs passava);
+- os testes rodam cada cenário em todo `bash` da máquina (`/bin/bash` 3.2 no macOS) e exigem o
+  mesmo resultado;
+- README, handoff e plano diziam que o script "recusa começar" sem dizer que é só no `all`.
+
+Recusados, com o motivo: o timeout de 12 min cobrindo o passo inteiro (o plano pede; ~3 min no
+CI); as strings do plano em português (o script imprime inglês, e os testes conferem o inglês).
+A versão do Claude Code ficou no script (`CLAUDE_CODE_VERSION`), não no `rust.yml` como dizia o
+D-193: o job `plugin` não instala mais nada.
