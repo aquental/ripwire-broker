@@ -9214,7 +9214,7 @@ chamada do gitleaks. O `run_plugin` agora roda num subshell, e um teste novo pro
 dentro dele ainda para o `all`.
 
 **Como é testado.** Em `tests/check_script.rs`: o `secrets` no `all` e na ordem; o alvo isolado
-pede só o `gitleaks` e não avisa do ripwire; um vazamento achado falha a execução; o `all` recusa
+pede só o `gitleaks` e o `git` e não avisa do ripwire; um vazamento achado falha a execução; o `all` recusa
 sem o `gitleaks`; o job do CI chama o alvo de mesmo nome; o job tem `fetch-depth: 0`,
 `persist-credentials: false`, versão exata, SHA-256 de 64 hex, `sha256sum -c` e nenhuma action do
 gitleaks. O `tests/agents_md.rs` obrigou o `AGENTS.md` a nomear o alvo novo.
@@ -9261,4 +9261,20 @@ json --print-timeout 5m -p`, sobre o patch exato do grupo. Três tentativas, nen
 - na terceira, com o prompt acrescido de "não execute comandos" e a cópia do repositório em
   `d59a372`, ele estourou o prazo de 5 min com a resposta ainda em curso (`status: ERROR`,
   `print_timeout`, exit 3).
+
+**Antigravity, com o prazo de 15 min** (escolha do usuário depois do estouro dos 5 min), sobre o
+grupo inteiro no estado final (`266bc3d`): respondeu em cerca de 5 min. Cinco achados, todos
+válidos e conferidos no código, tratados em TDD:
+
+- o `grep` que procura `ERR|FTL` no log falhava aberto: com erro (exit 2), ele contava como "sem
+  erro". Agora o teste usa o `must_not_match`, como as outras guardas (teste novo com o `grep`
+  quebrado só nesse padrão);
+- o teste do job ainda aceitava a conferência do hash movida para um comentário depois de uma
+  linha com aspas, e `sha256sum -c || :`. Agora o comentário só é cortado fora de aspas, a linha
+  da conferência tem de ser exatamente a esperada, e `|| :`, `|| exit 0` e `set +e` são recusados;
+- o `gitleaks` falso juntava os argumentos e ignorava o `NO_COLOR`. Agora ele recusa opções do
+  `git log` soltas como o real faz (`unknown flag`, exit 126) e colore os níveis sem `NO_COLOR`.
+  Tirar as aspas do `--log-opts` ou o `NO_COLOR=1` faz os testes falharem;
+- o teste das impressões digitais aceitava um `#` vazio como motivo e campos vazios;
+- a lista de ferramentas do `all` não citava o `git` (`AGENTS.md`, README, handoff, este D).
 

@@ -969,7 +969,7 @@ tests, the property tests, the CA-10 gate and the fixture guard (`default`), the
 the plugin (`plugin`, with the Claude Code version pinned in the script, through `npx`), and
 gitleaks over the whole history, merge resolutions included (`secrets`; exceptions are
 fingerprints in `.gitleaksignore`). With no target (`all`)
-it refuses to start when `cargo`, `cargo-nextest`, `npx`, `gitleaks` or `ripwire` is missing. `scripts/check.sh default` runs one target, checks only that target's tools, warns when
+it refuses to start when `cargo`, `cargo-nextest`, `npx`, `git`, `gitleaks` or `ripwire` is missing. `scripts/check.sh default` runs one target, checks only that target's tools, warns when
 `ripwire` is missing, and ends by saying what it did not run. `cargo lint` and `cargo lint-online` are
 the two clippy runs. `cargo deny` stays scheduled, outside PRs.
 

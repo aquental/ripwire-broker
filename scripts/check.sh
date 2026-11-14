@@ -189,10 +189,8 @@ scan_history() {
     printf '%s\n' "$log"
     [ "$status" -eq 0 ] || return "$status"
     # gitleaks 8.30 exits 0 when git writes anything to stderr, having scanned nothing.
-    if grep -Eq ' (ERR|FTL) ' <<< "$log"; then
-        echo "::error::gitleaks logged an error above, so the scan proved nothing" >&2
-        return 1
-    fi
+    must_not_match "gitleaks logged an error above, so the scan proved nothing" \
+        -Eq ' (ERR|FTL) ' <<< "$log" || return
     if ! grep -Eq ' INF [1-9][0-9]* commits scanned' <<< "$log"; then
         echo "::error::gitleaks scanned no commit, so the scan proved nothing" >&2
         return 1

@@ -50,7 +50,7 @@ scripts/check.sh default    # one target (also online, plugin, secrets); ends "p
 cargo lint                  # the default job's clippy; cargo lint-online for the online build
 ```
 
-`scripts/check.sh all` needs `cargo`, `cargo-nextest`, `npx`, `gitleaks` and `ripwire` on `PATH`; without
+`scripts/check.sh all` needs `cargo`, `cargo-nextest`, `npx`, `git`, `gitleaks` and `ripwire` on `PATH`; without
 ripwire the e2e tests pass having tested nothing. The `plugin` target runs the Claude Code version
 pinned in `scripts/check.sh` through `npx`, not the installed one. Opt-in suites (local model,
 live classifier): `README.md` §"Tests".

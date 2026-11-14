@@ -143,7 +143,22 @@ case "$call" in
     "git rev-parse --is-inside-work-tree") echo "${FAKE_INSIDE:-true}" ;;
     "git rev-parse --is-shallow-repository") echo "${FAKE_SHALLOW:-false}" ;;
     "gitleaks git "*)
-        printf '%b\n' "${FAKE_GITLEAKS_LOG:-5:24PM INF 3 commits scanned.\n5:24PM INF no leaks found}" >&2
+        # As the real one: git log options outside --log-opts are flags gitleaks does not know.
+        for arg in "$@"; do
+            case "$arg" in --all | --full-history | --diff-merges=*)
+                echo "Error: unknown flag: $arg" >&2
+                exit 126
+                ;;
+            esac
+        done
+        log=$(printf '%b' "${FAKE_GITLEAKS_LOG:-5:24PM INF 3 commits scanned.\n5:24PM INF no leaks found}")
+        # As the real one: coloured levels, even into a pipe, unless NO_COLOR is set.
+        if [ -z "${NO_COLOR:-}" ]; then
+            for level in INF ERR FTL; do
+                log=${log// $level / $'\e[32m'$level$'\e[0m' }
+            done
+        fi
+        printf '%s\n' "$log" >&2
         ;;
 esac
 exit 0
@@ -451,6 +466,19 @@ fn gitleaks_logging_an_error_fails_even_when_it_exits_zero() {
 }
 
 #[test]
+fn the_error_check_fails_closed_when_grep_errors() {
+    // A grep error (exit 2) on the ERR/FTL search must not read as "no error found".
+    let log = "5:24PM ERR [git] warning: synthetic\n5:24PM INF 373 commits scanned.\n\
+               5:24PM INF no leaks found";
+    let run = Sandbox::all()
+        .env("FAKE_GITLEAKS_LOG", log)
+        .grep_errors_on("(ERR|FTL)")
+        .run(&["secrets"]);
+    assert!(!run.ok(), "{}", run.both());
+    assert!(run.both().contains("grep failed"), "{}", run.both());
+}
+
+#[test]
 fn gitleaks_scanning_no_commit_fails() {
     let log = "5:24PM INF 0 commits scanned.\n5:24PM INF no leaks found";
     let run = Sandbox::all()
@@ -572,12 +600,24 @@ fn ci_jobs_call_the_script_under_their_required_names() {
 fn code_lines(block: &[String]) -> Vec<String> {
     block
         .iter()
-        .map(|l| match l.find(" #") {
-            Some(i) if !l[..i].contains('"') => l[..i].trim_end().to_string(),
-            _ => l.trim_end().to_string(),
-        })
-        .filter(|l| !l.trim_start().starts_with('#') && !l.trim().is_empty())
+        .map(|l| without_comment(l).trim_end().to_string())
+        .filter(|l| !l.trim().is_empty())
         .collect()
+}
+
+/// A line up to its comment: a `#` at the start or after a blank, outside quotes.
+fn without_comment(line: &str) -> &str {
+    let (mut single, mut double, mut previous) = (false, false, ' ');
+    for (i, c) in line.char_indices() {
+        match c {
+            '\'' if !double => single = !single,
+            '"' if !single => double = !double,
+            '#' if !single && !double && previous.is_whitespace() => return &line[..i],
+            _ => {}
+        }
+        previous = c;
+    }
+    line
 }
 
 #[test]
@@ -597,7 +637,14 @@ fn the_secrets_job_scans_the_whole_history_with_a_pinned_gitleaks() {
     assert!(has("fetch-depth: 0"), "{block}");
     assert!(has("persist-credentials: false"), "{block}");
     // Nothing turns the job off or its failure into a pass.
-    for escape in ["if:", "continue-on-error", "|| true"] {
+    for escape in [
+        "if:",
+        "continue-on-error",
+        "|| true",
+        "|| :",
+        "|| exit 0",
+        "set +e",
+    ] {
         assert!(!block.contains(escape), "`{escape}` in the job:\n{block}");
     }
     // The only action is the pinned checkout; gitleaks comes from its release, not an action.
@@ -631,10 +678,10 @@ fn the_secrets_job_scans_the_whole_history_with_a_pinned_gitleaks() {
     );
     // Its hash is checked against the pinned one before it is unpacked, installed or run.
     let check = first("sha256sum -c");
-    assert!(
-        lines[check].contains(r#"echo "$GITLEAKS_SHA256  $tarball" | sha256sum -c"#),
-        "{}",
-        lines[check]
+    assert_eq!(
+        lines[check].trim(),
+        r#"echo "$GITLEAKS_SHA256  $tarball" | sha256sum -c"#,
+        "the hash check, exactly"
     );
     for later in [
         "tar ",
@@ -670,13 +717,14 @@ fn the_gitleaks_exceptions_are_pinned_fingerprints_each_with_a_reason() {
             reason = false;
             continue;
         }
-        if line.starts_with('#') {
-            reason = true;
+        if let Some(text) = line.strip_prefix('#') {
+            reason = !text.trim().is_empty();
             continue;
         }
         let parts: Vec<&str> = line.split(':').collect();
         assert!(
             parts.len() == 4
+                && parts[1..3].iter().all(|p| !p.is_empty())
                 && parts[0].len() == 40
                 && parts[0].chars().all(|c| c.is_ascii_hexdigit())
                 && parts[3].parse::<u32>().is_ok()

@@ -54,7 +54,7 @@ cargo lint                  # o clippy do job default (alias em .cargo/config.to
 ```
 
 - Sem alvo (`all`), o script recusa começar se faltar ferramenta (`cargo`, `cargo-nextest`,
-  `npx`, `gitleaks`, `ripwire`) e diz o que instalar. Um alvo isolado confere só as ferramentas dele. Sem o
+  `npx`, `git`, `gitleaks`, `ripwire`) e diz o que instalar. Um alvo isolado confere só as ferramentas dele. Sem o
   `ripwire` no `PATH`, os testes e2e retornam cedo e passam sem testar nada
   (`require_ripwire!`): em `all` isso é falha; num alvo isolado, aviso e cobertura parcial.
 - O alvo `plugin` roda o Claude Code fixado no script (`CLAUDE_CODE_VERSION`, 2.1.292) pelo `npx`,
