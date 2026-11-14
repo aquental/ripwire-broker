@@ -349,7 +349,9 @@ funciona; `cargo build --locked` produz o mesmo resultado com e sem `.cargo/conf
     novo, reiniciar a sessão;
   - o que **não** volta sozinho: quem configurou a opção `binary` do plugin, ou tem outro
     `ripwire-broker` no `PATH`, continua no binário escolhido (`scripts/broker`, linha 39: a
-    opção vence o pin). Dizer como conferir qual executável está em uso (`doctor`).
+    opção vence o pin). Dizer como conferir qual executável está em uso (`doctor`). Na execução
+    (D-200): o `PATH` só vale quando o release fixado não está instalado, e o `doctor` não diz
+    qual binário roda; a conferência é o `scripts/broker --version`.
 - [x] Store de memória com esquema desconhecido. `memory forget --all` **não** é a saída:
   `forget_everything` (`src/memory/store.rs`, linha 773) revoga a coleta e apaga as pendências,
   mas depois chama `self.load()`, que devolve `UnknownSchema`; o comando falha e o snapshot
@@ -364,7 +366,7 @@ funciona; `cargo build --locked` produz o mesmo resultado com e sem `.cargo/conf
 **Aceitação:** ensaio de ponta a ponta numa instalação real do plugin, sem publicar nada:
 instalar a versão atual, aplicar o rollback num marketplace local (`--plugin-dir` ou um clone),
 atualizar, reinstalar o binário, reiniciar e conferir pelo `doctor` qual executável roda, com e
-sem a opção `binary`. Ensaio do esquema: um store com `schema_version` adulterado para 2 num
+sem a opção `binary` (feito com o `scripts/broker --version`, porque o `doctor` não diz; D-200). Ensaio do esquema: um store com `schema_version` adulterado para 2 num
 state dir temporário; conferir que o broker recusa sem corromper e que o procedimento
 documentado recupera. `scripts/check.sh all` verde no branch do rollback.
 

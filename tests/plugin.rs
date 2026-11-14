@@ -892,8 +892,11 @@ fn the_release_waits_for_a_human_before_its_first_write() {
 
 #[test]
 fn the_readme_says_how_to_roll_back_a_version() {
-    // ai-native plan, step 9: the way back, right after the way forward.
-    let readme = std::fs::read_to_string(plugin_root().join("README.md")).expect("README.md");
+    // ai-native plan, step 9: the way back, right after the way forward. Only what GitHub renders
+    // counts, and each obligation is a whole sentence: loose words appear elsewhere in the section.
+    let readme = common::markdown::without_comments(
+        &std::fs::read_to_string(plugin_root().join("README.md")).expect("README.md"),
+    );
     let headings: Vec<&str> = readme.lines().filter(|l| l.starts_with("## ")).collect();
     let publishing = headings
         .iter()
@@ -912,24 +915,28 @@ fn the_readme_says_how_to_roll_back_a_version() {
         .collect::<Vec<_>>()
         .join(" ");
     let flat = section.split_whitespace().collect::<Vec<_>>().join(" ");
-    for (what, words) in [
+    for (what, sentences) in [
         // The maintainer: the pins and the plugin's version go back together (the tests hold them
-        // equal), through a PR the hash check reads, and the bad release is marked.
+        // equal), the code stays, the hash check reads the PR, the bad release is marked.
         (
             "the maintainer's side",
             &[
-                "scripts/checksums.txt",
-                "plugin.json",
-                "SHA256SUMS",
-                "--prerelease",
+                "Set `.claude-plugin/plugin.json` `version` to the same version.",
+                "`Cargo.toml` stays where it is",
+                "`scripts/plugin-surface.sh`",
+                "`gh release edit vX.Y.Z --prerelease`",
+                "nothing refuses a prerelease",
             ][..],
         ),
-        // The user: update, reinstall the binary, restart.
+        // The user: update, clear the option, reinstall, restart; what happens in between.
         (
             "the user's side",
             &[
-                "claude plugin update ripwire-broker@aquental",
+                "`claude plugin update ripwire-broker@aquental`",
+                "clear the `binary` option",
                 "`sh install-binary.sh` again",
+                "If that version is still installed from before, it runs at once",
+                "otherwise refuses",
                 "Restart the session",
             ],
         ),
@@ -937,25 +944,33 @@ fn the_readme_says_how_to_roll_back_a_version() {
         (
             "what stays",
             &[
-                "the `binary` option, the pinned release",
+                "the `binary` option, the pinned release under the plugin's data directory, and `ripwire-broker` on `PATH`",
                 "keeps running that binary",
-                "PATH",
-                "scripts/broker\" --version",
+                "Running it anyway.",
+                r#"CLAUDE_PLUGIN_DATA="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/data/ripwire-broker-aquental""#,
+                r#"scripts/broker" --version"#,
+                "does not see the `binary` option",
+                "does not say which `ripwire-broker` the plugin chose",
             ],
         ),
         // A memory store the older binary cannot read.
         (
             "an unreadable memory store",
             &[
-                "unknown_schema",
+                "`store unavailable: unknown_schema`",
                 "`memory forget --all` does not get out of it",
+                "the snapshot stays",
+                "run a binary that knows the schema",
                 "stop the server and the hooks",
-                "move the workspace's store",
+                "`<state-dir>/memory/<workspace id>/`",
             ],
         ),
     ] {
-        for word in words {
-            assert!(flat.contains(word), "{what}: no {word:?} in: {flat}");
+        for sentence in sentences {
+            assert!(
+                flat.contains(sentence),
+                "{what}: no {sentence:?} in: {flat}"
+            );
         }
     }
 }

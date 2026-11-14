@@ -9553,7 +9553,7 @@ O que se viu:
 
 | Situação | O que o plugin roda |
 | --- | --- |
-| depois do update, antes de reinstalar | nada: recusa e manda rodar o `install-binary.sh` |
+| depois do update, antes de reinstalar, com o 0.1.0 já removido | nada: recusa e manda rodar o `install-binary.sh` |
 | depois de reinstalar | o 0.1.0 |
 | com a opção `binary` apontando para o 0.2.0 | o 0.2.0, com aviso no stderr |
 | sem o fixado instalado e um 0.2.0 no `PATH` | o 0.2.0, com aviso no stderr |
@@ -9575,7 +9575,8 @@ adulterado para `schema_version: 2`:
 - **o `scripts/broker` não acha o binário fixado quando chamado de um terminal.** Ele só procura
   em `CLAUDE_PLUGIN_DATA`, que o Claude Code exporta aos hooks e ao servidor; o `install-binary.sh`
   tem um padrão para esse diretório e o resolvedor não. Dentro do Claude Code isso não aparece. O
-  README manda passar a variável;
+  README manda passar a variável. Pela mesma razão, esse comando não vê a opção `binary`, que o
+  Claude Code também só passa ao servidor e aos hooks (achado da revisão, abaixo);
 - **nenhum comando descarta um store ilegível**, e um `memory add` contra ele diz "added 1 note" e
   sai 0, embora a nota vá para uma fila que não será ingerida.
 
@@ -9599,7 +9600,8 @@ memória dada como limitada. `serve --memory` fala com o classificador pago. O R
 jev-mem §12 como fonte, sem dizer que foi visto.
 
 **Como é testado.** `tests/plugin.rs` exige a seção logo depois de "Publishing a version" e as
-frases que carregam cada obrigação. Nove mutantes, todos mortos. Três deles só morreram depois que
+frases que carregam cada obrigação. Nove mutantes, todos mortos (a revisão, abaixo, achou outros
+que passavam). Três deles só morreram depois que
 o teste passou a exigir frases inteiras: com palavras soltas, elas apareciam em outro ponto da
 seção.
 
@@ -9609,4 +9611,47 @@ documentação, não algo que o usuário executa. O `scripts/broker` não foi mu
 **Armadilha registrada no handoff:** o `env!("CARGO_MANIFEST_DIR")` fica compilado no binário do
 teste. Duas worktrees com o mesmo `CARGO_TARGET_DIR`, ou uma worktree movida, leem a árvore
 errada. Isso deu falsos sobreviventes na revisão do grupo 7 e uma suíte vermelha falsa no rebase.
+
+**Revisão adversarial** (Codex, Antigravity e Grok; o `rust-review` à parte). Cada achado foi
+conferido com o resolvedor e o binário reais, em diretórios temporários, e cada mutante rodado com
+um alvo de compilação próprio. O que o README dizia de errado:
+
+- **a conferência pelo terminal mandava um usuário preso no binário ruim acreditar que estava no
+  bom** (alta; os três revisores). Com a opção `binary` apontando para o 0.2.0 e o 0.1.0
+  instalado, o comando do README mostrava 0.1.0, sem aviso: a opção só chega ao `scripts/broker`
+  pelas variáveis que o Claude Code passa ao servidor e aos hooks. Agora o README diz que a
+  conferência não vê a opção, e como passá-la (`CLAUDE_PLUGIN_OPTION_BINARY=<valor>`). Os passos do
+  usuário ganharam um passo que limpa a opção;
+- **"o plugin recusa o binário que tem" só vale se a versão anterior foi apagada.** O
+  `install-binary.sh` nunca remove outras versões; só o `--prune` remove. Depois de um rollback, o
+  0.1.0 antigo costuma estar lá e roda na hora; sem ele, roda um `ripwire-broker` do `PATH`. O
+  plugin só recusa quando não acha nenhum dos dois. No ensaio acima, o 0.1.0 tinha sido removido
+  por um `--prune` dado por engano com o 0.2.0 fixado, e a linha da tabela agora diz isso;
+- **o caminho do diretório de dados ignorava o `CLAUDE_CONFIG_DIR`**, que o `install-binary.sh`
+  respeita;
+- **"marcar como pre-release para ninguém fixá-lo de novo" prometia o que nada faz.** Nem o
+  passo da PR nem o instalador olham esse estado. Agora o README diz que é um aviso para pessoas;
+- **o `memory status` imprime antes uma linha de zeros**, que parece um store vazio;
+- **o plano ainda mandava conferir pelo `doctor`.** Agora diz o que foi feito.
+
+Também foi preciso conferir uma dúvida do Antigravity: se o usuário precisa de `claude plugin
+marketplace update` antes do `plugin update`. No `HOME` descartável, com um commit novo no
+marketplace local, só o `plugin update` já trouxe a versão nova. O README diz isso.
+
+**O teste aceitava o que não devia.** Passavam a seção inteira dentro de um comentário HTML e treze
+trocas de sentido:
+
+- manter o `version` ruim, reverter o `Cargo.toml` e inverter a ordem de resolução;
+- "o forget apaga o snapshot", outro caminho de store e o aviso apagado;
+- outro diretório de dados, a saída "rodar um binário que conhece o esquema" apagada, a opção
+  `binary` mantida, a conferência "vê tudo", o `doctor` "mostra o binário" e a recusa
+  incondicional.
+
+Agora o teste lê só o que o GitHub mostra (`tests/common/markdown.rs`, que mantém os blocos de
+código, onde está o comando) e exige frases inteiras. Os treze mutantes morreram.
+
+**Recusados:** que o `unknown_schema` possa acontecer hoje (toda escrita grava o esquema 1; só um
+snapshot editado à mão chega lá, e foi o que o ensaio fez); que o `install-binary.sh` sempre baixe
+de novo (verdade, mas o README não diz o contrário, e repetir não faz mal); que o caminho do store
+não esteja explicado (a seção "What runs, and where" do mesmo README define o state dir).
 
