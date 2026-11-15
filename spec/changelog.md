@@ -124,6 +124,12 @@
 | 2026-10-11 04:10 | Sessões de controle do bloco C: num cenário feito para a memória importar, ela foi entregue em todas as sessões que a tinham e o agente fez o mesmo com e sem ela, nos dois hosts (Claude Code: desfez a mudança anterior, 3 de 3 e 3 de 3; Codex: manteve e corrigiu o teste, 2 de 2 e 2 de 2). Nenhum efeito achado; `--memory` segue experimental | [D-179](#d-179--sessões-de-controle-a-memória-chega-e-não-muda-o-que-o-agente-faz) |
 | 2026-10-11 05:20 | A descrição do campo `note` pede também o porquê da mudança. No cenário de controle do D-179, com a nota dizendo "at the user's request", o Claude Code deixou de desfazer a mudança anterior: 0 de 5 sessões com memória, contra 6 de 7 sem memória e 3 de 3 com a nota antiga. É a primeira medição em que a memória muda um resultado. No Codex o cenário não discrimina | [D-180](#d-180--a-nota-diz-por-quê-e-o-claude-code-deixa-de-desfazer-a-mudança) |
 | 2026-10-11 06:30 | Medido o risco do D-180: a nota que diz "at the user's request" não faz o agente hesitar diante de um pedido novo e legítimo de mudar o mesmo valor. Os dois hosts mudaram de imediato, com a nota no envelope ou sem ela (Claude Code 7 de 7, Codex 2 de 2), no mesmo número de passos; para esse pedido a própria leitura deixa a nota de fora (0,45) | [D-181](#d-181--a-nota-com-o-porquê-não-faz-o-agente-hesitar-diante-de-um-pedido-novo) |
+| 2026-11-14 11:30 | Plano de prontidão para agentes ([`spec/plan/ai-native-plan.md`](plan/ai-native-plan.md)) a partir da auditoria AINE (26 aprovados, 20 reprovados; relatório em `docs/AINE-REPORT.md`), revisado pelo Codex: 14 achados, todos confirmados. O agente não terá credencial com escrita no repositório principal; `scripts/check.sh all` será a fonte dos passos do CI | [D-189](#d-189--plano-de-prontidão-para-agentes-revisado-pelo-codex) |
+| 2026-11-14 11:15 | O agente trabalha por uma conta de máquina com fork (opção A da etapa 4 do plano AI-native), escolha do usuário: sem permissão no repositório principal, PRs a partir do fork, e só o mantenedor mescla, cria tags e publica | [D-190](#d-190--o-agente-trabalha-por-uma-conta-de-máquina-com-fork) |
+| 2026-11-14 11:30 | Substitui o D-190: o usuário trocou a opção A pela B. O agente fica sem credencial do GitHub; faz commits locais e o mantenedor empurra, abre a PR, mescla e publica | [D-191](#d-191--o-agente-fica-sem-credencial-do-github-opção-b) |
+| 2026-11-14 11:32 | Substitui o D-190 e o D-191: as sessões de agente continuam com o login do mantenedor ao alcance, sem isolamento; risco aceito. Os itens de credenciais e de humano no caminho da auditoria AINE seguem reprovados por decisão | [D-192](#d-192--credencial-do-agente-risco-aceito) |
+| 2026-11-14 12:30 | Conferência do plano AI-native contra a árvore antes de executar: referências corretas, mas o alvo `plugin` falha no `--strict` com o Claude Code local (2.1.325; o CI fixa 2.1.292), o `checksums.txt` está em `integrations/claude-code/scripts/`, e a etapa 10 partia de um estado de skills que mudou. Decisões: o `check.sh` roda o `claude` fixado via `npx`; a conferência de hashes fica no YAML, fora do script; uma branch por grupo; as skills `rust-*` versionadas à parte; TDD de docs e YAML por testes que leem os arquivos e por um harness bash com ferramentas falsas | [D-193](#d-193--o-plano-ai-native-conferido-contra-a-árvore-antes-da-execução) |
+| 2026-11-14 13:40 | Etapa 6 do plano AI-native, em TDD: `scripts/check.sh [all\|default\|online\|plugin]` passa a ser a fonte dos passos do CI; os jobs `default`, `online` e `plugin` só o chamam, com os nomes intactos. `all` recusa começar se faltar `cargo-nextest`, `npx` ou `ripwire`; um alvo isolado termina com "partial coverage". Achado no caminho: as guardas por `grep` passavam quando o próprio `grep` falhava; agora falham fechado. O `claude` fixado (2.1.292) mora no script e roda pelo `npx`, com o postinstall liberado para o npm 12 | [D-194](#d-194--um-comando-roda-tudo-o-que-o-ci-roda-numa-pr) |
 | 2026-10-11 15:20 | Etapa 3 da T5.3 (Codex 0.161.0, `gpt-6.1-sol`): rodada de 60 sessões **inconclusiva**. 16 sessões morreram no limite de uso da conta e 9 foram invalidadas pelo guarda de contaminação; sobraram 35 válidas e 4 pares com histórico relevante (tokens B/A 0,94, IC 0,65 a 1,04). Dois achados do instrumento: o guarda marca `cat ~/.agents/skills/ripwire-*/SKILL.md` e `command -v graft` como ferramenta de contexto, e o Codex lê as skills do usuário mesmo com `--ignore-user-config` | [D-187](#d-187--etapa-3-da-t53-a-rodada-do-codex-parou-no-limite-de-uso) |
 | 2026-10-11 14:10 | Etapa 2 da T5.3: rodada completa no `ceci_app`, 13 sequências (30 sessões), braços A, B e C, 3 repetições, 270 sessões, US$ 94,24. Acerto na última sessão: A 34/37, B 37/37, C 32/34. Tokens com histórico relevante, mediana contra A: B 0,99 (IC 0,87 a 1,07), C 0,89 (IC 0,82 a 1,02). O braço B entregou a memória em 21 de 43 leituras (17 recusadas pelo classificador, 5 obsoletas); com entrega, 0,92. Latência de `context_for_task` sem piora. Cache quente: a leitura de memória não tem cache (B/A 6,9 na chamada repetida). Uma nota com muitas fontes passa da parte da memória e é cortada. **`--memory` não é promovido** | [D-186](#d-186--etapa-2-da-t53-o-braço-b-não-passa-no-gate-de-custo-o-classificador-recusa-metade-das-leituras) |
 | 2026-10-11 10:30 | O `ripwire-eval` passa a medir o Codex, em TDD: lê o transcript de `codex exec --json` com as mesmas contagens e os mesmos motivos de invalidez, e entrega o braço na linha de comando (`{codex_mcp}` vira os `-c mcp_servers.…` do braço). O registro de cada sessão ganha `memory_stop_reasons`, o `stop_reason` de cada leitura de memória | [D-185](#d-185--o-ripwire-eval-mede-o-codex-e-leva-o-stop_reason-da-leitura-ao-registro) |
@@ -8882,3 +8888,203 @@ remoto.
 
 **Risco conhecido.** O `a_hung_upstream_times_out_and_is_restarted` (issue #120) passa a rodar no
 CI contra o ripwire real. Ele já falhava localmente, sob carga.
+
+## D-189 — Plano de prontidão para agentes, revisado pelo Codex
+
+**O ponto de partida.** A auditoria AINE de 2026-11-14 ([`docs/AINE-REPORT.md`](../docs/AINE-REPORT.md))
+respondeu 46 perguntas sobre o repositório: 26 aprovadas, 20 reprovadas. Sete das reprovadas são
+o mesmo defeito: não há `AGENTS.md` nem `CLAUDE.md` na raiz, então nada do que o `handoff.md`
+ensina chega a um agente no início da sessão. As outras: nenhum comando único de verificação,
+varredura de segredos só em `tests/fixtures/`, o release publicado por uma tag sem ninguém no
+caminho, e o login do mantenedor (escopo `repo`) ao alcance de qualquer sessão.
+
+**O que foi decidido.** O plano está em [`spec/plan/ai-native-plan.md`](plan/ai-native-plan.md):
+dez etapas, as seis de prioridade alta primeiro. Nada foi implementado. O relatório fica em
+`docs/`, por pedido do usuário.
+
+**A revisão.** A primeira versão do plano foi revisada pelo Codex (`codex exec`, somente leitura).
+Os 14 achados foram conferidos no código e todos se aplicam; a tabela está no fim do plano. Os que
+mudaram a direção:
+
+- **Token restrito na conta do dono não protege.** `contents:write`, necessário para empurrar um
+  branch, também cria releases pela API; e `GH_TOKEN` só tem precedência sobre o login do keyring.
+  O plano passa a exigir que nenhuma credencial com escrita no repositório principal esteja ao
+  alcance do agente: uma conta de máquina com fork (recomendada) ou nenhuma credencial, e nos dois
+  casos um ambiente isolado das credenciais do mantenedor. A escolha é do mantenedor e fica em
+  aberto.
+- **O `checksums.txt` não é a única rota até o usuário.** O marketplace entrega do `master` o
+  `register.ts`, o `scripts/broker` e o `.mcp.json`. A mescla pelo mantenedor vira o portão de
+  toda a superfície distribuída; comparar os hashes com o `SHA256SUMS` do release fica como defesa
+  adicional.
+- **`memory forget --all` não recupera um store de esquema desconhecido:** `forget_everything`
+  chama `load()`, que devolve `UnknownSchema`. A primeira versão do plano documentaria uma saída
+  que não existe.
+- **O comando único roda tudo o que o CI roda numa PR,** inclusive o plugin e o gitleaks, e falha
+  quando falta ferramenta. Um alvo isolado declara cobertura parcial.
+
+**Fora do escopo, anotado.** Exigir revisão aprovada no `master` não entra: com um mantenedor e
+`enforce_admins` ligado, travaria as PRs do próprio dono. O índice deste arquivo não tem a linha
+do D-188, e o trecho do D-182 ao D-187 está em ordem decrescente; o acerto está na etapa 10 do
+plano. Um teste de `tests/plugin.rs` falhou uma vez na auditoria e passou nas duas execuções
+seguintes; o nome não foi capturado.
+
+## D-190 — O agente trabalha por uma conta de máquina com fork
+
+**A escolha.** A etapa 4 de [`spec/plan/ai-native-plan.md`](plan/ai-native-plan.md) deixava duas
+formas de tirar do agente a credencial de publicação ([D-189](#d-189--plano-de-prontidão-para-agentes-revisado-pelo-codex)).
+O usuário escolheu a opção A: uma segunda conta do GitHub, só para agentes, sem permissão no
+repositório principal, com um fork e um token restrito a esse fork. O agente empurra para o fork e
+abre a PR de lá.
+
+**O que isso garante.** Mesclar, criar tags, criar releases e aprovar o environment `release`
+exigem a identidade do mantenedor, que não está na sessão do agente. Toda PR de agente passa por um
+humano por construção, inclusive as que mudam o plugin que o marketplace entrega do `master`.
+
+**A opção descartada.** Nenhuma credencial do GitHub na sessão, com o mantenedor empurrando cada
+branch: mais simples de montar, mais atrito por PR.
+
+**O que continua condição.** A conta de máquina só protege se a sessão do agente não alcançar o
+keyring, o helper de credenciais do Git nem o agente SSH do mantenedor. Esse isolamento ainda não
+foi feito nem decidido como será (outro usuário do sistema, container ou devcontainer).
+
+## D-191 — O agente fica sem credencial do GitHub (opção B)
+
+**Substitui o [D-190](#d-190--o-agente-trabalha-por-uma-conta-de-máquina-com-fork).** O usuário
+trocou a opção A (conta de máquina com fork) pela B da etapa 4 de
+[`spec/plan/ai-native-plan.md`](plan/ai-native-plan.md): nenhuma credencial do GitHub na sessão do
+agente. O agente faz commits locais e escreve o texto da PR; o mantenedor empurra o branch, abre a
+PR, mescla, cria tags e publica. Não há conta nova, fork nem token a manter.
+
+**O que continua condição.** A opção B só é verdade se a sessão do agente não alcançar o login do
+mantenedor: hoje o `gh` e o Git da máquina usam o keyring com escopo `repo`, e qualquer sessão
+aberta nela herda esse acesso. Sem isolar a sessão (outro usuário do sistema, container ou
+devcontainer), os itens de credenciais e de humano no caminho do relatório continuam reprovados,
+e isso deve ser registrado como risco aceito, não como etapa feita.
+
+## D-192 — Credencial do agente: risco aceito
+
+**Substitui o [D-190](#d-190--o-agente-trabalha-por-uma-conta-de-máquina-com-fork) e o
+[D-191](#d-191--o-agente-fica-sem-credencial-do-github-opção-b).** Perguntado se a opção B valeria
+de fato (sessões isoladas, o mantenedor empurrando os branches) ou se tudo continuaria como está, o
+usuário escolheu continuar como está e aceitar o risco.
+
+**O que fica.** As sessões de agente rodam no usuário do mantenedor, com o login do GitHub dele
+(keyring, escopo `repo`) ao alcance. Não haverá isolamento, conta de máquina nem token restrito. Um
+token restrito sem isolamento não entra: `GH_TOKEN` só tem precedência sobre o keyring, e
+`contents:write` já basta para criar um release pela API.
+
+**O risco aceito.** Um agente, ou uma injeção de prompt que ele obedeça, consegue sem humano no
+caminho empurrar uma tag `v*`, criar um release, mesclar uma PR, aprovar o environment `release` e
+mudar o plugin entregue pelo marketplace. A proteção que sobra depende de o agente obedecer: a
+lista "Ask before" e a seção de credenciais do `AGENTS.md`, e os modos de permissão do host.
+
+**Consequência.** Os itens "alcance das credenciais do agente" e "humano no caminho de toda ação
+que muda produção" continuam reprovados numa nova auditoria, e o plano espera 18 de 20, não 20. O
+environment `release` da etapa 5 continua valendo contra o acidente, não contra um agente com o
+login.
+
+**Reabrir se** entrar um segundo mantenedor, o plugin ganhar usuários em número relevante, ou as
+sessões passarem a rodar sem supervisão.
+
+## D-193 — O plano AI-native conferido contra a árvore antes da execução
+
+**Contexto.** Antes de começar pela etapa 6, o [plano](plan/ai-native-plan.md) foi conferido
+contra o repositório (HEAD `298d0e3`). Todas as referências de linha e arquivo batem
+(`src/lib.rs` 5–9, `src/memory/store.rs` 773, `scripts/broker` 39 e 104, `handoff.md` 160 e 326,
+os três testes de `tests/plugin.rs`, os jobs `gates` e `draft` do `release.yml`). O job `default`
+leva ~2,5 min no CI, então o timeout de 12 min no passo único (etapa 6) sobra.
+
+**O que não batia.**
+
+- `claude plugin validate --strict integrations/claude-code` falha com o Claude Code instalado
+  na máquina do mantenedor (2.1.325): o validador novo trata como aviso o import com extensão
+  `.ts` nos `tests/*.test.ts` (TS5097). O CI fixa 2.1.292 e passa. Sem decisão, `check.sh all`
+  nunca ficaria verde localmente.
+- O `checksums.txt` está em `integrations/claude-code/scripts/checksums.txt`, não na raiz do
+  plugin.
+- A etapa 5 punha a conferência de hashes direto no YAML do `default`; a etapa 6 diz que o script
+  é a fonte dos passos do CI.
+- A etapa 10 propunha ignorar `.agents/` e `.grok/`, mas o `aine-readiness-analyzer` já está
+  versionado em `.agents/skills/` (739bdbe), e `.claude/skills/` e `.grok/skills/` são symlinks
+  para lá: ignorar `.agents/` quebraria os links.
+- `cargo-nextest` e `gitleaks` não estavam instalados (agora estão, via brew: 0.9.152 e 8.30.1).
+- As etapas 3 e 5 têm partes que só o mantenedor executa (secret scanning e push protection,
+  environment `release`, ensaio de push, próximo release real); esses grupos terminam com a
+  aceitação pendente com ele. O ensaio da etapa 9 escreve em `~/.claude` e pede confirmação.
+
+**Decisões do usuário.**
+
+- O alvo `plugin` do `check.sh` roda o `claude` na versão lida do `rust.yml`, via
+  `npx -y @anthropic-ai/claude-code@<versão>`: o mesmo validador do CI, sem mexer no plugin.
+- A conferência de hashes do `checksums.txt` (etapa 5) fica no YAML, fora do script: depende do
+  diff da PR e da rede.
+- Uma branch por grupo de etapas (6; 1+2+4; 3; 5; 7; 8; 9; 10), empilhadas; push, PR e mescla
+  são do mantenedor.
+- As skills `rust-best-practices`, `rust-port` e `rust-review` versionadas já, num commit à parte
+  (483e188), no mesmo arranjo do `aine-readiness-analyzer`.
+
+**Como cada grupo é feito.** TDD: para itens de documentação e YAML, o teste é um teste Rust em
+`tests/` que lê o arquivo (como `tests/plugin.rs` já faz com o `release.yml`); para o
+`check.sh`, um harness bash com `cargo` e `claude` falsos no `PATH`, sem rodar cargo dentro do
+cargo. Ao fim de cada grupo, revisão adversarial em paralelo pelo Codex e pelo Grok, cada achado
+conferido no código antes de virar teste, e a skill `rust-review` sobre o diff Rust do grupo.
+
+## D-194 — Um comando roda tudo o que o CI roda numa PR
+
+**Contexto.** Etapa 6 do [plano AI-native](plan/ai-native-plan.md): a auditoria reprovou "scripts
+de tarefa", "scripts nomeados" e "um comando que roda tudo". Os passos do CI moravam só no
+`rust.yml`, e rodá-los localmente pedia copiar oito comandos.
+
+**Decisão.** `scripts/check.sh [all|default|online|plugin]` tem os passos, na ordem do CI, e os
+três jobs do `rust.yml` só o chamam (`run: scripts/check.sh <job>`), com os nomes `default`,
+`online` e `plugin` intactos (D-107). O CI continua instalando o nextest e o `ripwire` (D-188)
+antes; o script imprime um `::group::` por verificação e o passo único herda o timeout de 12 min
+(D-144; o job `default` leva ~2,5 min). `.cargo/config.toml` só com os aliases `lint` e
+`lint-online`.
+
+- `all` (o padrão) recusa começar, dizendo o que instalar, quando falta `cargo`,
+  `cargo-nextest`, `npx` ou `ripwire`. Sem o `ripwire`, os testes e2e passariam vazios
+  (`require_ripwire!`). Um alvo isolado roda, avisa se faltar o `ripwire`, e termina com
+  "partial coverage: ran X; did not run Y"; só `all` imprime "all PR checks passed".
+- O Claude Code que valida o plugin está fixado no script (`CLAUDE_CODE_VERSION=2.1.292`) e roda
+  pelo `npx`, não o instalado (D-193). O npm 12 só roda scripts de instalação de pacotes da lista
+  `allow-scripts`, e sem o postinstall o pacote fica sem o binário nativo; o script exporta
+  `npm_config_allow_scripts=@anthropic-ai/claude-code`, que o npm mais antigo ignora.
+
+**Achado no caminho.** As duas guardas por `grep` (CA-10 e fixtures sintéticas) usavam
+`if grep …`, que lê "erro" (saída 2) como "nada encontrado" (saída 1): com o `grep` quebrado ou
+ausente, a guarda passava sem provar nada. O mesmo padrão estava no `rust.yml`. Agora o status é
+lido e só 1 passa.
+
+**Como foi testado.** `tests/check_script.rs` dirige o script com ferramentas falsas num `PATH`
+selado (14 testes: ordem dos passos, alvo isolado, ferramenta ausente, `ripwire` ausente, falha
+de um passo, CA-10, `grep` com erro, grupos de log, jobs do CI chamando o script, aliases). As
+mutações da aceitação, com as ferramentas reais: um `println!` em `src/budget.rs` falha no clippy
+(`print_stdout`); uma asserção invertida falha no nextest com o nome do teste; `reqwest` não
+opcional falha já no passo de testes, pelo `the_build_has_no_network_stack`, antes de chegar ao
+portão do CA-10 (que, conferido à parte, também pegaria: 17 linhas de crates de rede no
+`cargo tree`). `cargo build --locked` dá o mesmo binário com e sem `.cargo/config.toml`.
+`scripts/check.sh all` verde na máquina do mantenedor.
+
+**Revisão adversarial** (Codex 0.169.0 e Grok 1.0.77, em paralelo, cada achado conferido no
+código; mais a skill `rust-review` sobre `tests/check_script.rs`). Nenhum defeito de execução no
+script, no bash 3.2 nem no 5, e nenhum passo, flag ou variável do CI antigo perdido. Válidos e
+tratados em TDD, cada teste mostrado vermelho contra o mutante correspondente:
+
+- os testes das guardas por `grep` passavam pelo título do passo, que contém "CA-10": agora há um
+  teste por guarda, que confere o texto do `::error::`; e uma fixture com `api_key` numa cópia da
+  árvore prova que a guarda das fixtures roda;
+- `cargo tree` com erro precisa falhar o CA-10, não ler um grafo vazio (teste novo);
+- um passo que falhava deixava o `::group::` aberto. A correção (`"$@" || status=$?`) expôs a
+  armadilha que os testes novos pegaram: nesse contexto o bash ignora o `set -e` em tudo o que a
+  guarda chama, e as guardas saíam 0 depois de falhar. Cada falha dentro delas agora retorna
+  explicitamente;
+- a conferência dos jobs do CI agora é bloco a bloco (trocar os `run:` entre jobs passava);
+- os testes rodam cada cenário em todo `bash` da máquina (`/bin/bash` 3.2 no macOS) e exigem o
+  mesmo resultado;
+- README, handoff e plano diziam que o script "recusa começar" sem dizer que é só no `all`.
+
+Recusados, com o motivo: o timeout de 12 min cobrindo o passo inteiro (o plano pede; ~3 min no
+CI); as strings do plano em português (o script imprime inglês, e os testes conferem o inglês).
+A versão do Claude Code ficou no script (`CLAUDE_CODE_VERSION`), não no `rust.yml` como dizia o
+D-193: o job `plugin` não instala mais nada.

@@ -1,0 +1,5 @@
+[alias]
+# The two clippy runs of scripts/check.sh. Anything that needs an environment variable stays in
+# the script.
+lint = "clippy --all-targets --locked -- -D warnings"
+lint-online = "clippy --all-targets --locked --features online -- -D warnings"

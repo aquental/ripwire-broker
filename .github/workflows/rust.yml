@@ -56,51 +56,13 @@ jobs:
           install -D ripwire-*-linux-x64/ripwire "$HOME/.local/bin/ripwire"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           "$HOME/.local/bin/ripwire" --version
-      # Every cargo command takes --locked: Cargo.lock is committed, and without the flag CI
-      # may resolve versions that were never tested locally.
-      - name: Formatting
-        run: cargo fmt --all --check
-      - name: Clippy
-        run: cargo clippy --all-targets --locked -- -D warnings
-      - name: Tests
-        # Shorter than the job's: a step that runs out ends with its log kept, where a job
-        # cancelled at its own limit keeps none, and the hung test could not be named.
+      # The steps live in the script, so a PR's checks are one local command (ai-native plan,
+      # step 6). It prints a log group per check. The timeout is shorter than the job's: a step
+      # that runs out ends with its log kept, where a job cancelled at its own limit keeps none,
+      # and the hung test could not be named (D-144).
+      - name: Checks
         timeout-minutes: 12
-        run: cargo nextest run --locked
-      # The property tests again, on their own, with far more cases than the default 256. They
-      # are selected by target and not by a name prefix, because the repository names tests as
-      # sentences and renaming them to carry a `prop_` prefix would cost more than it buys
-      # (D-109, revising the comment D-107 left here).
-      #
-      # This target holds only pure functions, so the extra cases cost seconds. The properties
-      # that need a workspace on disk will be a separate target with a low case count.
-      - name: Property tests, many cases
-        env:
-          PROPTEST_CASES: "4096"
-        run: cargo nextest run --locked -E 'binary(props)'
-      # The filesystem properties run at their own, low count: each case writes files and asks a
-      # path-traversal guard about generated strings, so thousands of cases would buy little and
-      # cost minutes. Their case count is set in the file, not here (D-112).
-      - name: Filesystem property tests
-        run: cargo nextest run --locked -E 'binary(props_fs)'
-      # CA-10 as a machine-checked gate, not a promise. Complements the existing
-      # `the_build_has_no_network_stack` test in tests/mcp_surface.rs.
-      - name: The default build has no network stack (CA-10)
-        run: |
-          if cargo tree --locked -e normal | grep -Ei 'reqwest|secrecy|rustls|hyper'; then
-            echo "::error::a network crate reached the default build (CA-10)"
-            exit 1
-          fi
-          echo "no network crate in the default dependency graph"
-      # A future recording taken straight from the provider is the likeliest way a secret or
-      # real source enters the repository. Today every fixture is synthetic.
-      - name: Fixtures stay synthetic
-        run: |
-          if grep -rEinl 'Bearer |api_key|authorization|sk-[A-Za-z0-9]{10}' tests/fixtures/; then
-            echo "::error::a fixture above looks like it carries a credential"
-            exit 1
-          fi
-          echo "no credential-shaped string in tests/fixtures/"
+        run: scripts/check.sh default
 
   online:
     name: online
@@ -126,15 +88,11 @@ jobs:
           install -D ripwire-*-linux-x64/ripwire "$HOME/.local/bin/ripwire"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           "$HOME/.local/bin/ripwire" --version
-      - name: Clippy
-        run: cargo clippy --all-targets --locked --features online -- -D warnings
       # The #[ignore] tests stay ignored: nextest does not run them without --run-ignored,
       # and the three in online_live.rs need RIPWIRE_BROKER_JEV_API_KEY, which no PR run has.
-      - name: Tests
-        # Shorter than the job's: a step that runs out ends with its log kept, where a job
-        # cancelled at its own limit keeps none, and the hung test could not be named.
+      - name: Checks
         timeout-minutes: 12
-        run: cargo nextest run --locked --features online
+        run: scripts/check.sh online
 
   # The Claude Code plugin (spec/plan/mod-plan.md, T3.3, T4.2). Not a required check. It runs
   # without a login on a runner (PRs #75 and #76). The shape of the plugin's files and its scripts
@@ -148,13 +106,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # Pinned like the actions: the version the plugin was validated with locally.
-      - name: Claude Code CLI
-        run: npm install --global @anthropic-ai/claude-code@2.1.292
-      - name: The plugin
-        run: claude plugin validate --strict integrations/claude-code
-      - name: The marketplace
-        run: claude plugin validate --strict .
-      # The mod's tests, through Claude Code's test kit: no session, sign-in or network.
-      - name: The mod
-        run: claude plugin test integrations/claude-code
+      # The script fetches the pinned Claude Code through npx (CLAUDE_CODE_VERSION there, D-193)
+      # and runs both manifests with --strict, then the mod's tests through Claude Code's test kit
+      # (no session or sign-in).
+      - name: Checks
+        run: scripts/check.sh plugin
