@@ -31,7 +31,7 @@ a new flag with the same effect is covered.
   it is irreversible and also revokes collection.
 - **Touching the gates:** renaming jobs or editing check steps in `.github/workflows/rust.yml`,
   editing what `scripts/check.sh` or `.cargo/config.toml` runs, branch protection, rulesets,
-  environments, `deny.toml`, the gitleaks allowlist (plan step 3), because each one can turn a
+  environments, `deny.toml`, `.gitleaks.toml` and `.gitleaksignore`, because each one can turn a
   required check green without checking anything.
 
 ## Credentials
@@ -46,11 +46,11 @@ pushes and opens the PR.
 
 ```sh
 scripts/check.sh            # every check a PR runs, in CI's order; refuses if a tool is missing
-scripts/check.sh default    # one target (also online, plugin); ends with "partial coverage"
+scripts/check.sh default    # one target (also online, plugin, secrets); ends "partial coverage"
 cargo lint                  # the default job's clippy; cargo lint-online for the online build
 ```
 
-`scripts/check.sh all` needs `cargo`, `cargo-nextest`, `npx` and `ripwire` on `PATH`; without
+`scripts/check.sh all` needs `cargo`, `cargo-nextest`, `npx`, `git`, `gitleaks` and `ripwire` on `PATH`; without
 ripwire the e2e tests pass having tested nothing. The `plugin` target runs the Claude Code version
 pinned in `scripts/check.sh` through `npx`, not the installed one. Opt-in suites (local model,
 live classifier): `README.md` §"Tests".

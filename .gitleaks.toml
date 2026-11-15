@@ -1,0 +1,8 @@
+# gitleaks over the whole history: `scripts/check.sh secrets` and the `secrets` job of
+# .github/workflows/rust.yml (ai-native plan, step 3). The default rules, unchanged. No allowlist
+# here: a path or regex allowlist also hides a real secret written next to the thing it excuses.
+# Each known false positive is a fingerprint in .gitleaksignore instead. Changing either file is
+# a decision (AGENTS.md, "Touching the gates").
+
+[extend]
+useDefault = true

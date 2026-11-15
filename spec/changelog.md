@@ -131,6 +131,7 @@
 | 2026-11-14 12:30 | Conferência do plano AI-native contra a árvore antes de executar: referências corretas, mas o alvo `plugin` falha no `--strict` com o Claude Code local (2.1.325; o CI fixa 2.1.292), o `checksums.txt` está em `integrations/claude-code/scripts/`, e a etapa 10 partia de um estado de skills que mudou. Decisões: o `check.sh` roda o `claude` fixado via `npx`; a conferência de hashes fica no YAML, fora do script; uma branch por grupo; as skills `rust-*` versionadas à parte; TDD de docs e YAML por testes que leem os arquivos e por um harness bash com ferramentas falsas | [D-193](#d-193--o-plano-ai-native-conferido-contra-a-árvore-antes-da-execução) |
 | 2026-11-14 13:40 | Etapa 6 do plano AI-native, em TDD: `scripts/check.sh [all\|default\|online\|plugin]` passa a ser a fonte dos passos do CI; os jobs `default`, `online` e `plugin` só o chamam, com os nomes intactos. `all` recusa começar se faltar `cargo-nextest`, `npx` ou `ripwire`; um alvo isolado termina com "partial coverage". Achado no caminho: as guardas por `grep` passavam quando o próprio `grep` falhava; agora falham fechado. O `claude` fixado (2.1.292) mora no script e roda pelo `npx`, com o postinstall liberado para o npm 12 | [D-194](#d-194--um-comando-roda-tudo-o-que-o-ci-roda-numa-pr) |
 | 2026-11-14 15:30 | Etapas 1, 2 e 4 do plano AI-native, em TDD: `AGENTS.md` na raiz (4,8 KB, em inglês) roteia o agente para o handoff, o changelog, o PRD e o `scripts/check.sh`; traz as cinco regras mais caras, a lista "Ask before" (seis efeitos, cada um com motivo e exemplos) e a seção "Credentials" do D-192. `CLAUDE.md` só importa o `AGENTS.md`. O `handoff.md` passa a um estado único, até este D; o README marca `memory forget --all` como irreversível. `tests/agents_md.rs` confere tamanho, caminhos, seções, comandos e categorias | [D-195](#d-195--o-agentsmd-roteia-o-agente-e-diz-o-que-pede-um-humano) |
+| 2026-11-14 16:00 | Etapa 3 do plano AI-native, parte de código, em TDD: job `secrets` no `rust.yml` (não obrigatório) com o gitleaks 8.30.1 fixado por versão e SHA-256, `fetch-depth: 0`; `scripts/check.sh secrets`, incluído no `all`, com as resoluções de merge (`--diff-merges=remerge`), recusando clone raso e falhando quando o gitleaks loga erro ou não varre nenhum commit (ele sai 0 nesses casos); a única exceção é uma impressão digital no `.gitleaksignore` (o stub de cabeçalho de chave de `tests/props_fs.rs`), porque a allowlist por regex da primeira versão escondia uma chave real ao lado do stub. O histórico inteiro passou; amostras sintéticas numa cópia local falharam o alvo, também depois de apagadas da árvore e quando só um merge as trazia. Ligar o secret scanning e o push protection fica com o mantenedor | [D-196](#d-196--o-gitleaks-varre-o-histórico-inteiro-em-toda-pr) |
 | 2026-10-11 15:20 | Etapa 3 da T5.3 (Codex 0.161.0, `gpt-6.1-sol`): rodada de 60 sessões **inconclusiva**. 16 sessões morreram no limite de uso da conta e 9 foram invalidadas pelo guarda de contaminação; sobraram 35 válidas e 4 pares com histórico relevante (tokens B/A 0,94, IC 0,65 a 1,04). Dois achados do instrumento: o guarda marca `cat ~/.agents/skills/ripwire-*/SKILL.md` e `command -v graft` como ferramenta de contexto, e o Codex lê as skills do usuário mesmo com `--ignore-user-config` | [D-187](#d-187--etapa-3-da-t53-a-rodada-do-codex-parou-no-limite-de-uso) |
 | 2026-10-11 14:10 | Etapa 2 da T5.3: rodada completa no `ceci_app`, 13 sequências (30 sessões), braços A, B e C, 3 repetições, 270 sessões, US$ 94,24. Acerto na última sessão: A 34/37, B 37/37, C 32/34. Tokens com histórico relevante, mediana contra A: B 0,99 (IC 0,87 a 1,07), C 0,89 (IC 0,82 a 1,02). O braço B entregou a memória em 21 de 43 leituras (17 recusadas pelo classificador, 5 obsoletas); com entrega, 0,92. Latência de `context_for_task` sem piora. Cache quente: a leitura de memória não tem cache (B/A 6,9 na chamada repetida). Uma nota com muitas fontes passa da parte da memória e é cortada. **`--memory` não é promovido** | [D-186](#d-186--etapa-2-da-t53-o-braço-b-não-passa-no-gate-de-custo-o-classificador-recusa-metade-das-leituras) |
 | 2026-10-11 10:30 | O `ripwire-eval` passa a medir o Codex, em TDD: lê o transcript de `codex exec --json` com as mesmas contagens e os mesmos motivos de invalidez, e entrega o braço na linha de comando (`{codex_mcp}` vira os `-c mcp_servers.…` do braço). O registro de cada sessão ganha `memory_stop_reasons`, o `stop_reason` de cada leitura de memória | [D-185](#d-185--o-ripwire-eval-mede-o-codex-e-leva-o-stop_reason-da-leitura-ao-registro) |
@@ -9164,4 +9165,116 @@ parte e 2 recusados. Os válidos, já sem repetição:
 Recusados: um merge por `gh api …/merge` fora da lista (a lista é por efeito, e a regra diz que
 um caminho novo com o mesmo efeito está coberto); "Tudo entra por PR" em conflito com a seção de
 credenciais (as duas dizem que o `master` não recebe push do agente).
+
+## D-196 — O gitleaks varre o histórico inteiro em toda PR
+
+**Etapa 3 do [plano AI-native](plan/ai-native-plan.md), a parte que não é do mantenedor,** na
+branch `ai-native/3-secrets`, empilhada sobre a das etapas 1, 2 e 4.
+
+**O que entra.** Um job `secrets` no `rust.yml`, em `pull_request` e `push` ao `master`, **não
+obrigatório**: baixa o gitleaks 8.30.1 da release oficial, confere o SHA-256 escrito no próprio
+job (`551f6fc8…70eb`, conferido contra o `checksums.txt` da release e contra o tarball baixado à
+parte) antes de desempacotar, instalar ou executar, e chama `scripts/check.sh secrets`, com
+checkout de `fetch-depth: 0`. Nenhuma action de terceiros. O script ganha o alvo `secrets`,
+incluído no `all`; sem o `gitleaks` ou o `git`, o `all` recusa começar e diz como instalar. O alvo:
+
+- roda `gitleaks git --redact --verbose` sobre `--all --full-history --diff-merges=remerge`. Sem o
+  `remerge`, o gitleaks lê `git log -p`, que não mostra diff de merge: um segredo que só a
+  resolução de um conflito traz passava;
+- recusa um diretório que não é work tree e um clone raso. Nos dois casos o gitleaks 8.30.1 sai 0
+  tendo visto pouco ou nada;
+- falha quando o log do gitleaks tem `ERR` ou `FTL`, ou quando ele não varreu nenhum commit. Com
+  o git escrevendo qualquer coisa no stderr, ele loga `ERR … "stderr is not empty"` e **sai 0**;
+  conferido com o gitleaks real.
+
+O passo "Fixtures stay synthetic" fica: ele pega `authorization` e `api_key`, que o gitleaks não
+trata como segredo.
+
+**As exceções são impressões digitais, não uma allowlist.** O histórico inteiro deu um único
+achado: `private-key` em `tests/props_fs.rs`, o stub só de cabeçalho que os testes do leitor
+escrevem num tempdir para provar que ele recusa chaves. A primeira versão o liberava no
+`.gitleaks.toml` por caminho e por uma regex de linha, e dizia ter conferido "nos dois sentidos".
+Não estava conferido: o teste usou uma chave sozinha no arquivo. O Codex e o Grok mostraram, com
+commits reais, que uma chave real na mesma linha do stub, na linha seguinte, ou escrita com
+`concat!` depois de um cabeçalho igual ao do stub passava, porque o achado de chave privada ocupa
+várias linhas e a regex casava a primeira. Agora o `.gitleaks.toml` só estende as regras padrão, e
+o `.gitleaksignore` tem uma linha `commit:arquivo:regra:linha`, com o motivo logo acima. Ela
+desculpa aquele achado e nenhum outro; a mesma chave em outro commit, arquivo ou linha volta a
+ser achada (conferido: chave real ao lado do stub num commit novo, exit 1). Se o stub mudar de
+linha num commit futuro, o gitleaks acha de novo e a exceção nova é uma decisão.
+
+**Ensaio 1 do plano, local.** Num clone descartável: o alvo sai 0 no estado atual; um commit com
+um token sintético `ghp_` + 36 caracteres aleatórios faz o alvo sair 1 (regra `github-pat`, o
+segredo `REDACTED` no log); apagado o arquivo num commit seguinte, o alvo continua saindo 1,
+porque o histórico é o que conta. O clone foi apagado.
+
+**Achado no caminho:** o `export npm_config_allow_scripts` do alvo `plugin` (D-194) vazava para
+os passos seguintes; o teste do `all` com o `secrets` depois do `plugin` mostrou a variável na
+chamada do gitleaks. O `run_plugin` agora roda num subshell, e um teste novo prova que a falha
+dentro dele ainda para o `all`.
+
+**Como é testado.** Em `tests/check_script.rs`: o `secrets` no `all` e na ordem; o alvo isolado
+pede só o `gitleaks` e o `git` e não avisa do ripwire; um vazamento achado falha a execução; o `all` recusa
+sem o `gitleaks`; o job do CI chama o alvo de mesmo nome; o job tem `fetch-depth: 0`,
+`persist-credentials: false`, versão exata, SHA-256 de 64 hex, `sha256sum -c` e nenhuma action do
+gitleaks. O `tests/agents_md.rs` obrigou o `AGENTS.md` a nomear o alvo novo.
+
+**Pendências do mantenedor** (a etapa não está fechada sem elas): ligar `secret_scanning` e
+`secret_scanning_push_protection` no GitHub e conferir com
+`gh api repos/aquental/ripwire-broker --jq .security_and_analysis`; conferir o job num branch
+descartável com a mesma amostra (com o push protection ainda desligado, ou com uma amostra que só
+o gitleaks pega); o ensaio 2 (um push com um segredo de tipo bloqueado é recusado). Promover o
+`secrets` a obrigatório é outra decisão, depois de duas semanas sem falso positivo.
+
+**Revisão adversarial** (Codex 0.169.0, Grok 1.0.77 e o `rust-review`; o Antigravity 1.5.8 na
+seção abaixo). Cada achado foi conferido com o gitleaks real em cópias descartáveis, só com
+amostras sintéticas. Válidos, já sem repetição, todos tratados em TDD (teste vermelho, correção,
+mutante morto):
+
+- a allowlist por regex escondia uma chave real ao lado do stub (alta; acima);
+- um segredo trazido só por um merge não era varrido (alta; `remerge`);
+- o gitleaks sai 0 quando o git escreve no stderr ou fora de um repositório, tendo varrido nada
+  (alta; achado do Grok): o alvo agora lê o log;
+- um clone raso passava localmente (o CI usa `fetch-depth: 0`);
+- o teste do job só procurava substrings, comentários incluídos: `fetch-depth: 1 # fetch-depth: 0`,
+  a conferência do hash depois do `tar`, `sha256sum -c || true`, a conferência comentada, `if:
+  false`, `continue-on-error` e uma action a mais passavam. Agora o teste lê as linhas sem
+  comentário e exige a ordem (era também o "should fix" do `rust-review`);
+- nenhum teste lia o `.gitleaks.toml`: agora ele só pode estender as regras padrão, e cada linha do
+  `.gitleaksignore` tem de ser uma impressão digital completa, sem curinga, com o motivo logo acima;
+- o teste do `run_plugin` em subshell só fazia falhar o passo do meio (`|| true` no primeiro
+  passava): agora falha cada um dos três;
+- o plano dizia `gitleaks detect`.
+
+Dois mutantes sobreviveram aos testes novos e mostraram falhas deles: o teste do `ERR` trazia
+também "0 commits", e o comentário de cabeçalho do `.gitleaksignore` contava como motivo.
+Corrigidos. Recusado: "375 commits" estaria errado (o número depende das refs presentes; era o
+certo no commit em que foi escrito).
+
+**Antigravity (`agy` 1.5.8): sem revisão.** Rodado como subprocesso, `--mode plan --output-format
+json --print-timeout 5m -p`, sobre o patch exato do grupo. Três tentativas, nenhuma com texto:
+
+- na primeira, o modo headless negou `read_file`, porque não consegue pedir permissão, e devolveu
+  `SUCCESS` com `response` vazio;
+- na segunda, com a regra só de leitura `read_file(*)` aprovada pelo usuário, o agy tentou rodar
+  um comando, que também foi negado;
+- na terceira, com o prompt acrescido de "não execute comandos" e a cópia do repositório em
+  `d59a372`, ele estourou o prazo de 5 min com a resposta ainda em curso (`status: ERROR`,
+  `print_timeout`, exit 3).
+
+**Antigravity, com o prazo de 15 min** (escolha do usuário depois do estouro dos 5 min), sobre o
+grupo inteiro no estado final (`266bc3d`): respondeu em cerca de 5 min. Cinco achados, todos
+válidos e conferidos no código, tratados em TDD:
+
+- o `grep` que procura `ERR|FTL` no log falhava aberto: com erro (exit 2), ele contava como "sem
+  erro". Agora o teste usa o `must_not_match`, como as outras guardas (teste novo com o `grep`
+  quebrado só nesse padrão);
+- o teste do job ainda aceitava a conferência do hash movida para um comentário depois de uma
+  linha com aspas, e `sha256sum -c || :`. Agora o comentário só é cortado fora de aspas, a linha
+  da conferência tem de ser exatamente a esperada, e `|| :`, `|| exit 0` e `set +e` são recusados;
+- o `gitleaks` falso juntava os argumentos e ignorava o `NO_COLOR`. Agora ele recusa opções do
+  `git log` soltas como o real faz (`unknown flag`, exit 126) e colore os níveis sem `NO_COLOR`.
+  Tirar as aspas do `--log-opts` ou o `NO_COLOR=1` faz os testes falharem;
+- o teste das impressões digitais aceitava um `#` vazio como motivo e campos vazios;
+- a lista de ferramentas do `all` não citava o `git` (`AGENTS.md`, README, handoff, este D).
 

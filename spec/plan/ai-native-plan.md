@@ -3,7 +3,7 @@
 Data: **2026-11-14**. Base: `master`, HEAD `d9aa86e`.
 Origem: [`docs/AINE-REPORT.md`](../../docs/AINE-REPORT.md) (26 aprovados, 20 reprovados, 0 não
 aplicáveis).
-Status: **em execução** (etapa 6 feita, D-194; etapas 1, 2 e 4, D-195). Revisado pelo Codex em 2026-11-14: 14 achados, todos
+Status: **em execução** (etapa 6 feita, D-194; etapas 1, 2 e 4, D-195; etapa 3 sem a parte do mantenedor, D-196). Revisado pelo Codex em 2026-11-14: 14 achados, todos
 conferidos no código e incorporados (ver [Revisão adversarial](#revisão-adversarial)).
 Decisão: [D-189](../changelog.md#d-189--plano-de-prontidão-para-agentes-revisado-pelo-codex).
 Conferido contra a árvore antes da execução em 2026-11-14
@@ -118,7 +118,7 @@ coberta.
   - **escrever fora do repositório**: `install … --write` fora de um diretório temporário;
   - **apagar estado real**: `memory forget --all` em um state dir que não seja de teste;
   - **mexer nos portões**: renomear jobs do `rust.yml`, proteção de branch, rulesets,
-    environments, a allowlist do gitleaks, o `deny.toml`.
+    environments, as exceções do gitleaks (`.gitleaks.toml`, `.gitleaksignore`), o `deny.toml`.
 - [x] No `README.md`, marcar `memory forget --all` como irreversível.
 
 **Aceitação:** as seis categorias existem, cada uma com o motivo e os exemplos; a lista está na
@@ -132,17 +132,20 @@ configuração do repositório.
 - [ ] Mantenedor: ligar no GitHub `secret_scanning` e `secret_scanning_push_protection` (o
   repositório é público, então é gratuito). Conferir com
   `gh api repos/aquental/ripwire-broker --jq .security_and_analysis`.
-- [ ] Novo job `secrets` no `rust.yml`, em `pull_request` e `push` ao `master`, **não
+- [x] Novo job `secrets` no `rust.yml`, em `pull_request` e `push` ao `master`, **não
   obrigatório** no início: baixa o binário do gitleaks de uma release fixada, confere o SHA-256
   (mesmo padrão do passo do ripwire, sem action de terceiros) e roda
-  `gitleaks detect --redact` sobre o histórico (checkout com `fetch-depth: 0`).
-- [ ] `.gitleaks.toml` com allowlist por caminho e linha para os stubs sintéticos conhecidos
+  `gitleaks git --redact` sobre o histórico (checkout com `fetch-depth: 0`). Feito com as
+  resoluções de merge (`--diff-merges=remerge`) e recusando clone raso (D-196).
+- [x] ~~`.gitleaks.toml` com allowlist por caminho e linha~~ Feito como impressões digitais no
+  `.gitleaksignore` (commit, arquivo, regra e linha), porque a allowlist por caminho e linha
+  escondia uma chave real ao lado do stub (D-196). Era: allowlist para os stubs sintéticos conhecidos
   (`tests/online_units.rs`, `tests/props_fs.rs`: cabeçalhos `BEGIN … PRIVATE KEY` escritos em
   tempdir para testar o leitor), cada entrada com o motivo.
-- [ ] Rodar o gitleaks localmente sobre o histórico inteiro antes de abrir a PR e tratar o que
+- [x] Rodar o gitleaks localmente sobre o histórico inteiro antes de abrir a PR e tratar o que
   aparecer.
-- [ ] `scripts/check.sh secrets`, incluído no `all` (etapa 6).
-- [ ] Manter o passo "Fixtures stay synthetic": ele cobre padrões (`authorization`, `api_key`)
+- [x] `scripts/check.sh secrets`, incluído no `all` (etapa 6).
+- [x] Manter o passo "Fixtures stay synthetic": ele cobre padrões (`authorization`, `api_key`)
   que o gitleaks não trata como segredo.
 
 **Aceitação**, em dois ensaios separados, porque um push recusado nunca chega a virar PR:
