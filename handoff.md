@@ -1,7 +1,7 @@
 # Handoff — ripwire-broker
 
 Estado em 2026-11-14, até o
-[D-200](spec/changelog.md#d-200--o-caminho-de-volta-de-uma-versão-ensaiado).
+[D-202](spec/changelog.md#d-202--a-verificação-final-do-plano-ai-native-18-dos-20-itens-passam).
 Quem é agente começa pelo [`AGENTS.md`](AGENTS.md): comandos, regras e o que pede o mantenedor.
 O passo a passo de cada teste que falta está em
 [`spec/plan/roteiro-testes-pendentes.md`](spec/plan/roteiro-testes-pendentes.md).
@@ -30,7 +30,7 @@ da Cloudflare). O PRD vigente é
 | barra de status do Claude Code (§24) | feita (D-123); validada à mão numa sessão real do Claude Code 2.1.285, com fixture de payload real (D-128); as seis divergências da validação fechadas (D-129 a D-131); `hooks sem sessão` quando a entrada não traz `session_id` (D-163, #82) |
 | 6 · times e CI (HTTP autenticado, multi-workspace, políticas) | **não começada** |
 | CI com o ripwire real (D-188) | os jobs `default` e `online` instalam a última release do ripwire; os testes e2e deixaram de passar vazios no CI |
-| prontidão para agentes ([plano](spec/plan/ai-native-plan.md), D-189 a D-200) | em execução, uma branch por grupo. Feitas: a etapa 6 (`scripts/check.sh`, D-194), as 1, 2 e 4 (`AGENTS.md`, `CLAUDE.md`, a lista "Ask before" e a credencial do agente como risco aceito, D-192 e D-195), a parte de código da 3 (gitleaks no CI e no script, D-196; ligar o secret scanning e o push protection no GitHub é do mantenedor), a parte de código da 5 (aprovação do environment `release` antes do rascunho; numa PR, aviso no resumo quando o plugin muda e o `checksums.txt` conferido contra o `SHA256SUMS` do release, D-197; criar e configurar o environment é do mantenedor), a 7 (`.github/pull_request_template.md`, D-198; a aceitação pede uma PR aberta) a 8 (`spec/TEMPLATE.md`, D-199) e a 9 ("Rolling back a version" no README do plugin, ensaiada, D-200; a issue que o ensaio pede fica com o mantenedor). Falta a 10 |
+| prontidão para agentes ([plano](spec/plan/ai-native-plan.md), D-189 a D-202) | em execução, uma branch por grupo. Feitas: a etapa 6 (`scripts/check.sh`, D-194), as 1, 2 e 4 (`AGENTS.md`, `CLAUDE.md`, a lista "Ask before" e a credencial do agente como risco aceito, D-192 e D-195), a parte de código da 3 (gitleaks no CI e no script, D-196; ligar o secret scanning e o push protection no GitHub é do mantenedor), a parte de código da 5 (aprovação do environment `release` antes do rascunho; numa PR, aviso no resumo quando o plugin muda e o `checksums.txt` conferido contra o `SHA256SUMS` do release, D-197; criar e configurar o environment é do mantenedor), a 7 (`.github/pull_request_template.md`, D-198; a aceitação pede uma PR aberta) a 8 (`spec/TEMPLATE.md`, D-199), a 9 ("Rolling back a version" no README do plugin, ensaiada, D-200; a issue que o ensaio pede fica com o mantenedor) e a 10 (as skills `decision-entry`, `release` e `audit-rust` e o índice do changelog em ordem, D-201). Verificação final feita: 44 de 46 itens aprovados no relatório AINE (D-202). Faltam as partes do mantenedor das etapas 3, 5, 7 e 9 |
 | auditoria de 2026-10-04 (D-143, D-144) | os cinco defeitos mais graves e os achados médios corrigidos em TDD; ficam os baixos, o código morto e as simplificações (lista abaixo) |
 | achados baixos, área da CLI e dos hooks (D-147) | corrigidos em TDD, com o código morto e as simplificações da área; as outras áreas seguem |
 | achados baixos, núcleo MCP (D-148) | corrigidos em TDD, com as simplificações da área; seguem online, memória e eval |
@@ -112,6 +112,9 @@ cargo lint                  # o clippy do job default (alias em .cargo/config.to
   e comandos citados.
 - **`scripts/check.sh` e `.cargo/config.toml`:** o comando único dos checks de PR e os aliases
   `cargo lint`/`lint-online` (D-194); `tests/check_script.rs` o testa com ferramentas falsas.
+- **`.agents/skills/`:** as skills do repositório (`decision-entry`, `release`, `audit-rust`) e as
+  vendorizadas, com links em `.claude/skills/` e `.grok/skills/`; `tests/skills.rs` confere que
+  cada skill própria para onde a lista "Ask before" manda, e o índice do changelog (D-201).
 - **`scripts/plugin-surface.sh`:** o passo de PR que avisa quando o plugin muda e confere os
   hashes fixados contra o release (D-197); `tests/plugin_surface.rs` o testa com `git` e `gh`
   falsos. `tests/common/workflow.rs` lê os workflows por linha, sem comentários, para os testes.
@@ -122,7 +125,14 @@ cargo lint                  # o clippy do job default (alias em .cargo/config.to
   - `ripwire-broker-mcp.md`: o PRD;
   - `changelog.md`: todas as decisões (D-NNN), a tabela de índice no topo;
   - `plan/`: os planos de cada fase;
-  - `diagrams/`: arquitetura, mantida à mão.
+  - `diagrams/`: arquitetura, mantida à mão;
+  - `TEMPLATE.md`: o molde de uma spec nova (D-199);
+  - `prompt/`: ponteiros para prompts que viraram skill (D-201);
+  - `old/`: PRDs e notas anteriores, só para consulta.
+- **`docs/`:** o PRD da memória (`jev-mem-prd.md`) e o estudo que o originou, e o relatório de
+  prontidão para agentes (`AINE-REPORT.md`, refeito no D-202).
+- **`examples/`:** `spike.rs` (as medições da Fase 0) e `jev_record.rs` (grava uma troca real com o
+  Jev para as fixtures); o `cargo lint` os compila.
 - **`integrations/`:** configuração e skill para Claude Code e Codex.
 - **`integrations/claude-code/`:** também é o plugin do Claude Code (§25 do PRD): manifesto em
   `.claude-plugin/plugin.json`, servidor em `.mcp.json`, hooks em `hooks/hooks.json`, o mod em
@@ -479,8 +489,8 @@ Cada uma custou uma conclusão errada antes de ser achada. O changelog conta sei
   função privada.
 - **Mutação para provar que um teste morde.** Já pegou meia dúzia de testes que não testavam nada.
 - **Toda decisão vira uma entrada `D-NNN` em `spec/changelog.md`,** em português: linha no índice
-  do topo e seção no fim. A ordem do índice não é uma só: o bloco do D-155 em diante é crescente
-  (linha nova depois da última), o que vem antes dele é decrescente.
+  do topo e seção no fim. O índice é crescente, do D-001 ao último, uma linha por decisão: a
+  linha nova vai no fim dele (D-201). A skill `decision-entry` faz isso.
 - **Commits e PRs em inglês;** código e comentários também. Docs de `spec/` em português.
 - **Spec nova parte do `spec/TEMPLATE.md`** (D-199): contexto e problema, objetivos e não
   objetivos, critérios de aceitação em Dado/quando/então numerados, falhas e comportamento

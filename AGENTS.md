@@ -81,3 +81,5 @@ public: nothing from private corpus repositories goes into a commit.
 - `spec/changelog.md`: every decision and its reason (D-NNN); it wins over any other document.
 - `spec/ripwire-broker-mcp.md`: the PRD, with acceptance criteria CA-01 to CA-10.
 - `spec/plan/`: one plan per phase; `spec/plan/ai-native-plan.md` is the one in progress.
+- `.agents/skills/`: `decision-entry` (a D-NNN entry), `release` (stops at the tag, the approval
+  and the merge), `audit-rust`; linked from `.claude/skills/` and `.grok/skills/`.

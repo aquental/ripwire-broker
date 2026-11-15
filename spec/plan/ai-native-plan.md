@@ -3,7 +3,7 @@
 Data: **2026-11-14**. Base: `master`, HEAD `d9aa86e`.
 Origem: [`docs/AINE-REPORT.md`](../../docs/AINE-REPORT.md) (26 aprovados, 20 reprovados, 0 não
 aplicáveis).
-Status: **em execução** (etapa 6 feita, D-194; etapas 1, 2 e 4, D-195; etapa 3 sem a parte do mantenedor, D-196; etapa 5 sem a parte do mantenedor, D-197; etapa 7 sem a aceitação, que pede uma PR aberta, D-198; etapa 8, D-199; etapa 9, D-200). Revisado pelo Codex em 2026-11-14: 14 achados, todos
+Status: **em execução** (etapa 6 feita, D-194; etapas 1, 2 e 4, D-195; etapa 3 sem a parte do mantenedor, D-196; etapa 5 sem a parte do mantenedor, D-197; etapa 7 sem a aceitação, que pede uma PR aberta, D-198; etapa 8, D-199; etapa 9, D-200; etapa 10, D-201; verificação final, D-202). Revisado pelo Codex em 2026-11-14: 14 achados, todos
 conferidos no código e incorporados (ver [Revisão adversarial](#revisão-adversarial)).
 Decisão: [D-189](../changelog.md#d-189--plano-de-prontidão-para-agentes-revisado-pelo-codex).
 Conferido contra a árvore antes da execução em 2026-11-14
@@ -372,23 +372,25 @@ documentado recupera. `scripts/check.sh all` verde no branch do rollback.
 
 ### 10. Skills versionadas
 
-**Arquivos:** `.claude/skills/` (versionar), `skills-lock.json`, `.gitignore`.
+**Arquivos:** `.claude/skills/` (versionar), `skills-lock.json`, `.gitignore`. Na execução
+(D-201): `.agents/skills/`, `.claude/skills/`, `.grok/skills/`, `spec/prompt/auditoria-rust.md`,
+`spec/changelog.md` e `tests/skills.rs`; o `skills-lock.json` e o `.gitignore` não mudaram.
 
 - [ ] ~~Decidir o que fazer com as cópias do `aine-readiness-analyzer`~~ Feito antes da execução:
   as skills vendorizadas moram em `.agents/skills/`, com symlinks em `.claude/skills/` e
   `.grok/skills/`, e o `skills-lock.json` fixa a origem (739bdbe, 298d0e3, 483e188). Não ignorar
   `.agents/`: os links quebrariam. As skills próprias desta etapa seguem o mesmo arranjo.
-- [ ] `decision-entry`: acrescenta a linha no índice e a seção `## D-NNN` em
+- [x] `decision-entry`: acrescenta a linha no índice e a seção `## D-NNN` em
   `spec/changelog.md`, com a data de `date`. Antes, acertar o índice: o D-188 não tem linha
   nele, e o bloco do D-182 ao D-187 está em ordem decrescente dentro do trecho que a convenção
   diz ser crescente.
-- [ ] `release`: a sequência de "Publishing a version". A skill prepara (versão, gates, texto
+- [x] `release`: a sequência de "Publishing a version". A skill prepara (versão, gates, texto
   da PR do `checksums.txt` a partir do `SHA256SUMS` publicado) e **para** nos passos que são do
   mantenedor: a tag, a aprovação do environment, a mescla. Ela teria como fazê-los (etapa 4), então a parada
   é regra da skill e é conferida na revisão dela.
-- [ ] `audit-rust`: `spec/prompt/auditoria-rust.md` como skill invocável; o arquivo original
+- [x] `audit-rust`: `spec/prompt/auditoria-rust.md` como skill invocável; o arquivo original
   vira um ponteiro, para não haver duas cópias.
-- [ ] Nenhuma skill executa algo da lista "Ask before" sem parar para perguntar; conferir cada
+- [x] Nenhuma skill executa algo da lista "Ask before" sem parar para perguntar; conferir cada
   uma contra a lista, pelo efeito.
 
 **Aceitação:** um clone novo tem as skills; `decision-entry` produz uma entrada que segue o
@@ -399,14 +401,16 @@ formato das existentes. **Dependências:** etapas 1, 2, 4 e 5.
 - [ ] Um teste de `tests/plugin.rs` falhou uma vez em `cargo test --locked` e passou nas duas
   execuções seguintes (886 aprovados no total). O nome não foi capturado. Reproduzir com
   `cargo nextest run --test plugin` em laço sob carga, abrir issue com o nome, e tratar como os
-  #120 e #122.
+  #120 e #122. Não reproduzido (D-202): 30 rodadas com nextest e 40 com `cargo test`, sob carga,
+  sem falha; sem o nome não há issue a abrir. Fica aberto.
 
 ## Verificação final
 
-- [ ] Rodar de novo o analisador e comparar com o `docs/AINE-REPORT.md` de 2026-11-14.
+- [x] Rodar de novo o analisador e comparar com o `docs/AINE-REPORT.md` de 2026-11-14 (D-202:
+  44 aprovados e 2 reprovados, contra 26 e 20).
   Esperado: 18 dos 20 reprovados passam. Os itens de credenciais e de humano no
   caminho continuam reprovados, por decisão (D-192).
-- [ ] Entradas D-NNN para: o `AGENTS.md` como ponto de entrada; o environment `release` e sua configuração; a verificação do
+- [x] Entradas D-NNN para: o `AGENTS.md` como ponto de entrada; o environment `release` e sua configuração; a verificação do
   `checksums.txt` por máquina; o script único como fonte dos passos do CI; o gitleaks e a
   promoção a obrigatório.
 
