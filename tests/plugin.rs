@@ -824,3 +824,68 @@ fn the_release_workflow_publishes_what_install_binary_downloads() {
     assert!(yml.contains("uses: ./.github/workflows/rust.yml"));
     assert!(yml.contains("--draft") && yml.contains("--draft=false"));
 }
+
+#[test]
+fn the_release_waits_for_a_human_before_its_first_write() {
+    // ai-native plan, step 5: the `release` environment's approval comes after the gates and
+    // before the draft, the build of what users download, and the publication.
+    use common::workflow::{is_condition, job_block, job_code, job_names, read};
+    let yml = read("release.yml");
+    // No other job: a fifth one without `needs: draft` could write before the approval.
+    assert_eq!(job_names(&yml), ["gates", "draft", "build", "publish"]);
+    // The job's own key, not a step's.
+    assert!(
+        job_block(&yml, "draft")
+            .iter()
+            .any(|l| l == "    environment: release"),
+        "{:#?}",
+        job_block(&yml, "draft")
+    );
+    for job in ["gates", "build", "publish"] {
+        assert!(
+            !job_code(&yml, job)
+                .iter()
+                .any(|l| l.contains("environment:")),
+            "{job} holds an environment"
+        );
+    }
+    // The job's own `needs:` key, at its indentation: the same text inside a script is not one.
+    let needs = |job: &str, on: &str| {
+        job_code(&yml, job)
+            .iter()
+            .any(|l| *l == format!("    needs: {on}"))
+    };
+    assert!(needs("draft", "gates"));
+    assert!(needs("build", "draft"));
+    assert!(needs("publish", "build"));
+    assert!(
+        !job_code(&yml, "gates")
+            .iter()
+            .any(|l| l.contains("write") || l.contains("permissions:")),
+        "the gates run before the approval and must not ask for any permission"
+    );
+    // Nothing skips a step or turns its failure into a pass.
+    for job in ["gates", "draft", "build", "publish"] {
+        for line in job_code(&yml, job) {
+            assert!(!is_condition(&line), "{job}: {line}");
+            for escape in [
+                "continue-on-error",
+                "|| true",
+                "|| :",
+                "|| exit 0",
+                "set +e",
+            ] {
+                assert!(!line.contains(escape), "{job}: {line}");
+            }
+        }
+    }
+    // The tag is checked against the crate's version before the draft exists.
+    let draft = job_code(&yml, "draft");
+    let at = |needle: &str| {
+        draft
+            .iter()
+            .position(|l| l.contains(needle))
+            .unwrap_or_else(|| panic!("no `{needle}` in draft"))
+    };
+    assert!(at(r#"[ "$tag" = "v$crate" ]"#) < at("gh release create"));
+}

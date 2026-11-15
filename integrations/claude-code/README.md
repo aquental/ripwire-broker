@@ -143,8 +143,12 @@ Its tests run without a session, sign-in or network:
 The order is fixed, and `tests/plugin.rs` holds it:
 
 1. Raise `version` in `Cargo.toml`; run the gates.
-2. Tag `vX.Y.Z` on `master`. The release workflow (`.github/workflows/release.yml`) refuses a tag
-   that is not the `Cargo.toml` version, runs the gates of `rust.yml`, builds
+2. Tag `vX.Y.Z` on `master`. The release workflow (`.github/workflows/release.yml`) runs the
+   gates of `rust.yml`, then **waits for an approval** of the `release` environment (Actions, the
+   run, "Review deployments") before it writes anything. That holds once the maintainer has set
+   the environment's required reviewer on GitHub; until then GitHub creates it unprotected and
+   nothing waits. Approved, it refuses a tag that is not
+   the `Cargo.toml` version, builds
    `ripwire-broker-vX.Y.Z-<target>.tar.gz` (with `ripwire-broker` and `ripwire-eval`, built with
    `--features online`) for `aarch64-apple-darwin`, `x86_64-apple-darwin`,
    `x86_64-unknown-linux-gnu` and `aarch64-unknown-linux-gnu`, and publishes them with
@@ -152,7 +156,10 @@ The order is fixed, and `tests/plugin.rs` holds it:
    has the lines for step 3.
 3. Write `vX.Y.Z` on the first line of `scripts/checksums.txt` and one `sha256  asset` line per
    target; set `.claude-plugin/plugin.json` `version` to `X.Y.Z` (the tests require both to agree,
-   and the plugin never to be ahead of `Cargo.toml`).
+   and the plugin never to be ahead of `Cargo.toml`). On the PR, the `default` job downloads the
+   release's `SHA256SUMS` and fails unless the lines are the same and the release is published
+   (`scripts/plugin-surface.sh`); any PR that touches this directory or `.claude-plugin/` also gets
+   a warning in its job summary. Both are a check next to the review, not a replacement.
 4. `claude plugin validate --strict integrations/claude-code` and `claude plugin validate --strict .`;
    commit. Users get it with `claude plugin update ripwire-broker@aquental`, then run
    `install-binary.sh` again (the previous release is never run: only the pinned version counts).

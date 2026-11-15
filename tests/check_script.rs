@@ -8,6 +8,11 @@
 //! calls the same script.
 #![cfg(unix)]
 
+mod common;
+
+use common::shell::bashes as shells;
+use common::workflow::{code_lines, job_block};
+
 use std::fs;
 use std::os::unix::fs::{PermissionsExt, symlink};
 use std::path::{Path, PathBuf};
@@ -203,17 +208,6 @@ fn host_tool(name: &str) -> PathBuf {
         .map(|d| d.join(name))
         .find(|p| is_executable(p))
         .unwrap_or_else(|| panic!("{name} not on the host PATH"))
-}
-
-/// The first bash on `PATH`, plus the system one when it is a different file (macOS: 3.2).
-fn shells() -> Vec<PathBuf> {
-    let mut shells = vec![host_tool("bash")];
-    let system = PathBuf::from("/bin/bash");
-    let same = |a: &Path, b: &Path| fs::canonicalize(a).ok() == fs::canonicalize(b).ok();
-    if is_executable(&system) && !same(&shells[0], &system) {
-        shells.push(system);
-    }
-    shells
 }
 
 const DEFAULT_CALLS: &[&str] = &[
@@ -565,19 +559,6 @@ fn a_failing_check_still_closes_its_log_group() {
     );
 }
 
-/// Each job's own lines, from `  <job>:` to the next line at the jobs' indentation.
-fn job_block(yml: &str, job: &str) -> Vec<String> {
-    let header = format!("  {job}:");
-    let is_job_start =
-        |l: &str| l.starts_with("  ") && !l.starts_with("   ") && !l[2..].starts_with('#');
-    yml.lines()
-        .skip_while(|l| *l != header)
-        .enumerate()
-        .take_while(|(i, l)| *i == 0 || !is_job_start(l))
-        .map(|(_, l)| l.to_owned())
-        .collect()
-}
-
 #[test]
 fn ci_jobs_call_the_script_under_their_required_names() {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(".github/workflows/rust.yml");
@@ -594,30 +575,6 @@ fn ci_jobs_call_the_script_under_their_required_names() {
             .collect();
         assert_eq!(calls, [job], "job {job} must call its own target");
     }
-}
-
-/// A job's lines without comments: a property written in a comment is not a property.
-fn code_lines(block: &[String]) -> Vec<String> {
-    block
-        .iter()
-        .map(|l| without_comment(l).trim_end().to_string())
-        .filter(|l| !l.trim().is_empty())
-        .collect()
-}
-
-/// A line up to its comment: a `#` at the start or after a blank, outside quotes.
-fn without_comment(line: &str) -> &str {
-    let (mut single, mut double, mut previous) = (false, false, ' ');
-    for (i, c) in line.char_indices() {
-        match c {
-            '\'' if !double => single = !single,
-            '"' if !single => double = !double,
-            '#' if !single && !double && previous.is_whitespace() => return &line[..i],
-            _ => {}
-        }
-        previous = c;
-    }
-    line
 }
 
 #[test]
