@@ -163,3 +163,66 @@ The order is fixed, and `tests/plugin.rs` holds it:
 4. `claude plugin validate --strict integrations/claude-code` and `claude plugin validate --strict .`;
    commit. Users get it with `claude plugin update ripwire-broker@aquental`, then run
    `install-binary.sh` again (the previous release is never run: only the pinned version counts).
+
+## Rolling back a version
+
+A bad release goes back the way it came: through the pins. Nothing here deletes a release.
+
+**The maintainer**, in a PR:
+
+1. Put the previous release back in `scripts/checksums.txt`: its tag on the first line and the
+   lines of its `SHA256SUMS`. Set `.claude-plugin/plugin.json` `version` to the same version. The
+   tests require both to agree, and the `default` job checks the lines against the release's
+   `SHA256SUMS` (`scripts/plugin-surface.sh`). `Cargo.toml` stays where it is: the code may be
+   ahead of the plugin, never behind it.
+2. Mark the bad release: `gh release edit vX.Y.Z --prerelease`. It is a signal to people; nothing
+   refuses a prerelease (the pins and `install-binary.sh` go by tag), so the review of the next
+   PR that pins a version is what keeps it out.
+3. Merge. The marketplace serves `master`, so users get the previous version from the next update.
+
+**The user:**
+
+1. `claude plugin update ripwire-broker@aquental`. It fetches the marketplace itself.
+2. If you set the `binary` option, clear the `binary` option (or point it at the pinned release):
+   `/plugin configure ripwire-broker@aquental`. While it is set, it wins over everything below.
+3. `sh install-binary.sh` again, from the plugin's `scripts/`. If that version is still installed
+   from before, it runs at once and this step only checks it again. If it is not (an earlier
+   `--prune` removed it), the plugin runs a `ripwire-broker` found on `PATH`, with a warning, and
+   otherwise refuses: the server and the hooks say "the binary for version X.Y.Z is not
+   installed" with the command to run, and the session start says the same in one line.
+4. Restart the session: the server and the hooks pick up the plugin's new version only then.
+
+**What does not go back on its own.** The plugin runs, in this order, the `binary` option, the
+pinned release under the plugin's data directory, and `ripwire-broker` on `PATH`. Someone who set
+the `binary` option, or who has no pinned release installed and an old `ripwire-broker` on `PATH`,
+keeps running that binary after the rollback. The plugin says so on stderr ("… is version 0.2.0;
+the plugin pins 0.1.0. Running it anyway.").
+
+To see what runs, ask the plugin's own resolver for the version. From a terminal, give it the
+plugin's data directory, which Claude Code only exports to hooks and the server:
+
+```sh
+CLAUDE_PLUGIN_DATA="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/data/ripwire-broker-aquental" \
+  sh "<the plugin's directory>/scripts/broker" --version
+```
+
+This check does not see the `binary` option either, which Claude Code also passes only to the
+server and the hooks, and the terminal's `PATH` may not be Claude Code's. If you set the option,
+that is the binary that runs; add `CLAUDE_PLUGIN_OPTION_BINARY=<its value>` to the command to see
+what the plugin makes of it. `ripwire-broker doctor` does not say which `ripwire-broker` the plugin
+chose. `sh install-binary.sh --prune` removes the other installed versions.
+
+**A memory store the older binary cannot read.** A store written by a newer schema is refused by
+an older binary: `memory status` prints a line of zeros, then `store unavailable: unknown_schema`,
+and nothing in the store is changed. The server is meant to keep giving the structural context,
+with the memory reported as limited (`docs/jev-mem-prd.md` §12). `memory forget --all` does not get
+out of it: it revokes collection and drops the pending observations, then fails on the same
+schema, and the snapshot stays. What works:
+
+- run a binary that knows the schema (roll forward instead of back); or
+- stop the server and the hooks (close the sessions), then move the workspace's store,
+  `<state-dir>/memory/<workspace id>/`, out of the state dir as a backup. The next run starts an
+  empty store, with collection on. The backup keeps the text of every memory: delete it when it is
+  no longer needed.
+
+Only schema 1 exists today, and every write records it: this is for the first schema change.

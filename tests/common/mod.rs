@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 pub mod classifier;
 pub mod fake;
+pub mod markdown;
 pub mod memory;
 pub mod shell;
 pub mod summarizer;

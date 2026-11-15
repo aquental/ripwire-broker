@@ -135,6 +135,7 @@
 | 2026-11-14 18:00 | Etapa 5 do plano AI-native, parte de código, em TDD: o job `draft` do `release.yml` declara `environment: release`, então a aprovação vem depois dos portões e antes do rascunho, da compilação e da publicação; numa PR, o passo "Plugin surface" do job `default` (`scripts/plugin-surface.sh`) escreve um aviso no resumo quando a PR toca `integrations/claude-code/` ou `.claude-plugin/` e, quando o `checksums.txt` muda, exige as mesmas linhas do `SHA256SUMS` do release publicado da primeira linha. Conferido contra o release `v0.1.0` real. Criar e configurar o environment fica com o mantenedor | [D-197](#d-197--um-humano-aprova-antes-de-o-release-escrever-qualquer-coisa) |
 | 2026-11-14 19:00 | Etapa 7 do plano AI-native: `.github/pull_request_template.md` com o checklist tirado das convenções do handoff (teste vermelho antes, entrada D-NNN, nenhum crate novo no build padrão, `scripts/check.sh all` verde, fixtures sintéticas, a pergunta sobre o que o usuário do plugin executa) e uma seção livre do que foi verificado e como; as PRs do Dependabot não usam o template | [D-198](#d-198--toda-pr-abre-com-as-convenções-como-checklist) |
 | 2026-11-14 19:30 | Etapa 8 do plano AI-native: `spec/TEMPLATE.md`, o molde de spec com as seções que aparecem nos PRDs (contexto e problema, objetivos e não objetivos, critérios de aceitação Dado/quando/então numerados como os CA-NN, falhas e comportamento obrigatório, como desfazer, decisões relacionadas, status e data); a convenção do handoff aponta para ele; nenhum documento existente foi reformatado | [D-199](#d-199--uma-spec-nova-parte-de-um-molde) |
+| 2026-11-14 21:00 | Etapa 9 do plano AI-native: "Rolling back a version" no README do plugin (lado do mantenedor, lado do usuário, o que não volta sozinho, como ver qual binário roda, o store de memória com esquema desconhecido), ensaiado de ponta a ponta com um HOME descartável e um marketplace local (v0.1.0 → v0.2.0 simulada → v0.1.0) e com um store adulterado para o esquema 2. O ensaio achou que o `doctor` não diz qual binário roda, que o `scripts/broker` de um terminal não acha o binário fixado sem `CLAUDE_PLUGIN_DATA`, e que nenhum comando descarta um store ilegível; os dois últimos ficam como issue para o mantenedor | [D-200](#d-200--o-caminho-de-volta-de-uma-versão-ensaiado) |
 | 2026-10-11 15:20 | Etapa 3 da T5.3 (Codex 0.161.0, `gpt-6.1-sol`): rodada de 60 sessões **inconclusiva**. 16 sessões morreram no limite de uso da conta e 9 foram invalidadas pelo guarda de contaminação; sobraram 35 válidas e 4 pares com histórico relevante (tokens B/A 0,94, IC 0,65 a 1,04). Dois achados do instrumento: o guarda marca `cat ~/.agents/skills/ripwire-*/SKILL.md` e `command -v graft` como ferramenta de contexto, e o Codex lê as skills do usuário mesmo com `--ignore-user-config` | [D-187](#d-187--etapa-3-da-t53-a-rodada-do-codex-parou-no-limite-de-uso) |
 | 2026-10-11 14:10 | Etapa 2 da T5.3: rodada completa no `ceci_app`, 13 sequências (30 sessões), braços A, B e C, 3 repetições, 270 sessões, US$ 94,24. Acerto na última sessão: A 34/37, B 37/37, C 32/34. Tokens com histórico relevante, mediana contra A: B 0,99 (IC 0,87 a 1,07), C 0,89 (IC 0,82 a 1,02). O braço B entregou a memória em 21 de 43 leituras (17 recusadas pelo classificador, 5 obsoletas); com entrega, 0,92. Latência de `context_for_task` sem piora. Cache quente: a leitura de memória não tem cache (B/A 6,9 na chamada repetida). Uma nota com muitas fontes passa da parte da memória e é cortada. **`--memory` não é promovido** | [D-186](#d-186--etapa-2-da-t53-o-braço-b-não-passa-no-gate-de-custo-o-classificador-recusa-metade-das-leituras) |
 | 2026-10-11 10:30 | O `ripwire-eval` passa a medir o Codex, em TDD: lê o transcript de `codex exec --json` com as mesmas contagens e os mesmos motivos de invalidez, e entrega o braço na linha de comando (`{codex_mcp}` vira os `-c mcp_servers.…` do braço). O registro de cada sessão ganha `memory_stop_reasons`, o `stop_reason` de cada leitura de memória | [D-185](#d-185--o-ripwire-eval-mede-o-codex-e-leva-o-stop_reason-da-leitura-ao-registro) |
@@ -9520,4 +9521,137 @@ sem repetição, em TDD:
   memória mantém o contexto estrutural quando o provider cai. O molde agora pede para dizer se a
   falha bloqueia ou degrada, e por quê (achado do subagente que conferiu o Codex e o Antigravity);
 - **a lista da linha de estado do handoff tinha perdido uma conjunção.**
+
+## D-200 — O caminho de volta de uma versão, ensaiado
+
+**Etapa 9 do [plano AI-native](plan/ai-native-plan.md),** na branch `ai-native/9-rollback`,
+empilhada sobre a da etapa 8.
+
+**O que entra.** "Rolling back a version" no README do plugin, logo depois de "Publishing a
+version":
+
+- **o lado do mantenedor:** numa PR, o `checksums.txt` volta ao release anterior (a tag e as linhas
+  do `SHA256SUMS` dele) e o `version` do `plugin.json` volta junto; o passo da PR (D-197) confere as
+  linhas. O release ruim é marcado com `gh release edit --prerelease`;
+- **o lado do usuário:** `claude plugin update`, o `install-binary.sh` de novo e reiniciar a sessão;
+- **o que não volta sozinho:** a opção `binary`, e um `ripwire-broker` antigo no `PATH` quando o
+  release fixado não está instalado. O plugin avisa no stderr;
+- **como ver qual binário roda;**
+- **o store de memória com esquema desconhecido.**
+
+**Ensaio de ponta a ponta, sem publicar nada**, escolha do usuário. O Claude Code 2.1.292 rodou com
+um `HOME` descartável no scratchpad e ambiente vazio (`env -i`), e o `~/.claude` real foi
+conferido intacto antes e depois. O marketplace foi um clone local desta branch. A sequência:
+
+1. instalar o plugin 0.1.0 e o binário do release real `v0.1.0`;
+2. uma v0.2.0 "ruim" simulada num commit local, com o tarball feito à mão e instalado por
+   `install-binary.sh --from`; `plugin update` e o binário 0.2.0 rodando;
+3. o rollback, com `git revert` desse commit, `plugin marketplace update`, `plugin update` e
+   `install-binary.sh`.
+
+O que se viu:
+
+| Situação | O que o plugin roda |
+| --- | --- |
+| depois do update, antes de reinstalar, com o 0.1.0 já removido | nada: recusa e manda rodar o `install-binary.sh` |
+| depois de reinstalar | o 0.1.0 |
+| com a opção `binary` apontando para o 0.2.0 | o 0.2.0, com aviso no stderr |
+| sem o fixado instalado e um 0.2.0 no `PATH` | o 0.2.0, com aviso no stderr |
+| `--prune` | só o fixado fica |
+
+**Ensaio do esquema.** Um store real foi criado por `memory add` num state dir temporário e
+adulterado para `schema_version: 2`:
+
+- `memory status` diz `store unavailable: unknown_schema` e sai 0, sem tocar o snapshot;
+- `memory forget --all` cria o `revoked`, esvazia as pendências e falha (exit 1), com o snapshot
+  intacto, como o plano previa;
+- mover `<state-dir>/memory/<id>/` para fora recupera: store vazio e coleta ligada.
+
+**O que o ensaio achou, e o que muda no plano:**
+
+- **o `doctor` não diz qual `ripwire-broker` roda.** O plano mandava conferir por ele. O README
+  manda perguntar a versão ao resolvedor do próprio plugin (`scripts/broker --version`), que avisa
+  com o caminho quando não é o fixado;
+- **o `scripts/broker` não acha o binário fixado quando chamado de um terminal.** Ele só procura
+  em `CLAUDE_PLUGIN_DATA`, que o Claude Code exporta aos hooks e ao servidor; o `install-binary.sh`
+  tem um padrão para esse diretório e o resolvedor não. Dentro do Claude Code isso não aparece. O
+  README manda passar a variável. Pela mesma razão, esse comando não vê a opção `binary`, que o
+  Claude Code também só passa ao servidor e aos hooks (achado da revisão, abaixo);
+- **nenhum comando descarta um store ilegível**, e um `memory add` contra ele diz "added 1 note" e
+  sai 0, embora a nota vá para uma fila que não será ingerida.
+
+Os dois últimos são mudança de produto (o resolvedor está em `integrations/claude-code/`, na lista
+"Ask before"; a memória está em `src/`), fora do plano. Ficam como issue, que o mantenedor abre.
+Texto proposto:
+
+> **Recovering from a memory store with an unknown schema.** An older binary refuses a store
+> written by a newer schema (`unknown_schema`), and `memory forget --all` revokes collection, drops
+> the pending observations, then fails on the same schema, leaving the snapshot. The only way out
+> is moving `<state-dir>/memory/<workspace id>/` by hand. `memory add` against such a store also
+> reports "added 1 note" and exits 0, while the note sits in a spool that will not be ingested.
+> Proposal: a `memory forget --all --unreadable` (or `memory reset`) that moves the store aside
+> under the writer lock, and `memory add` failing on an unreadable store. Separately, the plugin's
+> `scripts/broker` could fall back to `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/data/
+> ripwire-broker-aquental` like `install-binary.sh` does, so `broker --version` from a terminal
+> finds the pinned binary.
+
+**Uma frase do README não foi ensaiada:** que o servidor segue com o contexto estrutural e a
+memória dada como limitada. `serve --memory` fala com o classificador pago. O README cita o PRD
+jev-mem §12 como fonte, sem dizer que foi visto.
+
+**Como é testado.** `tests/plugin.rs` exige a seção logo depois de "Publishing a version" e as
+frases que carregam cada obrigação. Nove mutantes, todos mortos (a revisão, abaixo, achou outros
+que passavam). Três deles só morreram depois que
+o teste passou a exigir frases inteiras: com palavras soltas, elas apareciam em outro ponto da
+seção.
+
+**Edição em `integrations/claude-code/`.** Só o README, que a etapa 9 pede por nome. É
+documentação, não algo que o usuário executa. O `scripts/broker` não foi mudado.
+
+**Armadilha registrada no handoff:** o `env!("CARGO_MANIFEST_DIR")` fica compilado no binário do
+teste. Duas worktrees com o mesmo `CARGO_TARGET_DIR`, ou uma worktree movida, leem a árvore
+errada. Isso deu falsos sobreviventes na revisão do grupo 7 e uma suíte vermelha falsa no rebase.
+
+**Revisão adversarial** (Codex, Antigravity e Grok; o `rust-review` à parte). Cada achado foi
+conferido com o resolvedor e o binário reais, em diretórios temporários, e cada mutante rodado com
+um alvo de compilação próprio. O que o README dizia de errado:
+
+- **a conferência pelo terminal mandava um usuário preso no binário ruim acreditar que estava no
+  bom** (alta; os três revisores). Com a opção `binary` apontando para o 0.2.0 e o 0.1.0
+  instalado, o comando do README mostrava 0.1.0, sem aviso: a opção só chega ao `scripts/broker`
+  pelas variáveis que o Claude Code passa ao servidor e aos hooks. Agora o README diz que a
+  conferência não vê a opção, e como passá-la (`CLAUDE_PLUGIN_OPTION_BINARY=<valor>`). Os passos do
+  usuário ganharam um passo que limpa a opção;
+- **"o plugin recusa o binário que tem" só vale se a versão anterior foi apagada.** O
+  `install-binary.sh` nunca remove outras versões; só o `--prune` remove. Depois de um rollback, o
+  0.1.0 antigo costuma estar lá e roda na hora; sem ele, roda um `ripwire-broker` do `PATH`. O
+  plugin só recusa quando não acha nenhum dos dois. No ensaio acima, o 0.1.0 tinha sido removido
+  por um `--prune` dado por engano com o 0.2.0 fixado, e a linha da tabela agora diz isso;
+- **o caminho do diretório de dados ignorava o `CLAUDE_CONFIG_DIR`**, que o `install-binary.sh`
+  respeita;
+- **"marcar como pre-release para ninguém fixá-lo de novo" prometia o que nada faz.** Nem o
+  passo da PR nem o instalador olham esse estado. Agora o README diz que é um aviso para pessoas;
+- **o `memory status` imprime antes uma linha de zeros**, que parece um store vazio;
+- **o plano ainda mandava conferir pelo `doctor`.** Agora diz o que foi feito.
+
+Também foi preciso conferir uma dúvida do Antigravity: se o usuário precisa de `claude plugin
+marketplace update` antes do `plugin update`. No `HOME` descartável, com um commit novo no
+marketplace local, só o `plugin update` já trouxe a versão nova. O README diz isso.
+
+**O teste aceitava o que não devia.** Passavam a seção inteira dentro de um comentário HTML e treze
+trocas de sentido:
+
+- manter o `version` ruim, reverter o `Cargo.toml` e inverter a ordem de resolução;
+- "o forget apaga o snapshot", outro caminho de store e o aviso apagado;
+- outro diretório de dados, a saída "rodar um binário que conhece o esquema" apagada, a opção
+  `binary` mantida, a conferência "vê tudo", o `doctor` "mostra o binário" e a recusa
+  incondicional.
+
+Agora o teste lê só o que o GitHub mostra (`tests/common/markdown.rs`, que mantém os blocos de
+código, onde está o comando) e exige frases inteiras. Os treze mutantes morreram.
+
+**Recusados:** que o `unknown_schema` possa acontecer hoje (toda escrita grava o esquema 1; só um
+snapshot editado à mão chega lá, e foi o que o ensaio fez); que o `install-binary.sh` sempre baixe
+de novo (verdade, mas o README não diz o contrário, e repetir não faz mal); que o caminho do store
+não esteja explicado (a seção "What runs, and where" do mesmo README define o state dir).
 
