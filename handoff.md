@@ -1,7 +1,8 @@
 # Handoff — ripwire-broker
 
-Estado em 2026-10-10, até o
-[D-169](spec/changelog.md#d-169--roteiro-dos-testes-pendentes-e-três-medições).
+Estado em 2026-11-14, até o
+[D-195](spec/changelog.md#d-195--o-agentsmd-roteia-o-agente-e-diz-o-que-pede-um-humano).
+Quem é agente começa pelo [`AGENTS.md`](AGENTS.md): comandos, regras e o que pede o mantenedor.
 O passo a passo de cada teste que falta está em
 [`spec/plan/roteiro-testes-pendentes.md`](spec/plan/roteiro-testes-pendentes.md).
 Para quem pega o projeto agora: o que existe, o que está no meio, o que falta e onde já se tropeçou.
@@ -28,6 +29,8 @@ da Cloudflare). O PRD vigente é
 | `--jev-provider cloudflare` (D-166, #89) | feito em TDD e rodado contra a Cloudflare real: o Clef (Workers AI) pelo mesmo protocolo do Jev. O provider decide a URL (nenhuma vem da configuração), abre o envelope `{success, errors, messages, result}` e limita o pedido a 64 perguntas; `--jev-account-id` é obrigatório com ele e redigido no `jev.log`; a credencial vem da mesma `RIPWIRE_BROKER_JEV_API_KEY`. O padrão segue `typesafe`, e **o provider em uso é o Jev**. Com Cloudflare o modelo padrão é `clef-flash`, mantido pelo mantenedor depois da medição: com os limiares do Jev ele rejeita o arquivo de teste do corpus sintético, que o `clef` admite (6,3 vezes o preço, `--jev-model clef`). A Cloudflare não será o provider (D-167), então não há limiares por provider nem planos de tê-los |
 | barra de status do Claude Code (§24) | feita (D-123); validada à mão numa sessão real do Claude Code 2.1.285, com fixture de payload real (D-128); as seis divergências da validação fechadas (D-129 a D-131); `hooks sem sessão` quando a entrada não traz `session_id` (D-163, #82) |
 | 6 · times e CI (HTTP autenticado, multi-workspace, políticas) | **não começada** |
+| CI com o ripwire real (D-188) | os jobs `default` e `online` instalam a última release do ripwire; os testes e2e deixaram de passar vazios no CI |
+| prontidão para agentes ([plano](spec/plan/ai-native-plan.md), D-189 a D-195) | em execução, uma branch por grupo. Feitas: a etapa 6 (`scripts/check.sh`, D-194) e as 1, 2 e 4 (`AGENTS.md`, `CLAUDE.md`, a lista "Ask before" e a credencial do agente como risco aceito, D-192 e D-195). Faltam as 3, 5, 7, 8, 9 e 10 |
 | auditoria de 2026-10-04 (D-143, D-144) | os cinco defeitos mais graves e os achados médios corrigidos em TDD; ficam os baixos, o código morto e as simplificações (lista abaixo) |
 | achados baixos, área da CLI e dos hooks (D-147) | corrigidos em TDD, com o código morto e as simplificações da área; as outras áreas seguem |
 | achados baixos, núcleo MCP (D-148) | corrigidos em TDD, com as simplificações da área; seguem online, memória e eval |
@@ -37,7 +40,7 @@ da Cloudflare). O PRD vigente é
 | leitor do workspace por `openat` (D-152) | cada componente aberto relativo ao anterior, sem seguir link, pela crate `rustix`: um diretório trocado por link depois das conferências não leva mais para fora do workspace |
 | revisão de 2026-10-04 (D-146) | os cinco achados de maior impacto em produção corrigidos em TDD (leitura do online fora da thread assíncrona, TOCTOU do leitor, chave fora dos processos filhos, prazo no `ripwire --version`, erros do worker de memória no stderr); os demais ficam na lista abaixo |
 | plugin do Claude Code ([plano](spec/plan/mod-plan.md), §25 do PRD) | Etapas 1 e 2 implementadas (D-158, D-159): `integrations/claude-code/` é o plugin e o mod (`hooks/register.ts`, testes em `integrations/claude-code/tests/`, `claude plugin test integrations/claude-code`, Claude Code 2.1.292), a raiz é o marketplace `aquental`. Release `v0.1.0` publicado pelo `release.yml` e fixado no `checksums.txt` (D-160). Mods sem variável de early access desde o 2.1.292 (D-161); o `register.ts` e o kit tipados com as declarações do host, e `MultiEdit` como `/^MultiEdit$/` no matcher, porque o literal quebrava a inferência nos tipos do 2.1.295 (#83); o braço `broker-plugin` do eval é trabalho futuro (D-162). O que falta é do mantenedor, listado no §5a do plano: verificações numa sessão real (P1, P2, P6, P7), instalar pelo marketplace (P3), medir (P8); depois a T3.4 e a T6.1 |
-| `--memory` · memória persistente ([PRD](docs/jev-mem-prd.md), [plano](spec/plan/jev-mem-plan.md)) | Fases 0 a 5 feitas (D-136 a D-142): store, coleta pelas tools e pelos hooks, comandos locais, worker de enriquecimento no `serve --memory`, `memory drain --online`, a leitura em `context_for_task` (`memories[]`, `provenance.memory`, seção legível no texto MCP), a consolidação (cadência de 20 enriquecimentos ou 24 h, decisões e ligações por par, nota derivada pelo `--summarizer-cmd` só com o gate de 0,85) e o instrumento da avaliação (`--memory-selection deterministic`, braços `broker-memory` e `broker-memory-deterministic`, sequências no corpus, custo da memória no relatório). A T2.0 (Choice no modelo pinado) rodou com a chave real. A T3.12, o texto enriquecido das observações (`memory-observation/v2`, PRD v0.4 §5.2, D-171), está implementada e sozinha não é entregue (D-172). A entrega vem da T3.13 (D-173, PRD v0.5): `context_before_finish` aceita `note`, uma ou duas frases do agente, guardadas como nota `host_supplied`; no cenário do roteiro ela teve 0,77 e foi entregue. Pendente: a T3.11, validar num Claude Code e num Codex reais que os hosts usam as memórias; os hooks não as trazem na v1 (não fazem HTTP e não há cache de decisões). Pendente também a T5.3, a rodada da avaliação (≥ 30 tarefas em sequências, fora do repositório; o plano lista o que o instrumento ainda não faz). Fase 6 (fechamento) não começada; **experimental**. Para acompanhar ao vivo: `--memory-debug-log` (D-164), uma linha por evento em `debug.log` ao lado do store, escrita pelo servidor, pelos hooks e pelos comandos, para `tail -F`. A leitura faz o routing junto com o primeiro scoring e não pergunta se deve parar sem evidência (D-165): 1–2 requests, cabendo nos 850 ms. Num A/B da leitura com store sintético a seleção não mudou e a mediana caiu de 782 para 524 ms; o efeito na tarefa do agente fica para a T5.3 |
+| `--memory` · memória persistente ([PRD](docs/jev-mem-prd.md), [plano](spec/plan/jev-mem-plan.md)) | Fases 0 a 5 feitas (D-136 a D-142): store, coleta pelas tools e pelos hooks, comandos locais, worker de enriquecimento no `serve --memory`, `memory drain --online`, a leitura em `context_for_task` (`memories[]`, `provenance.memory`, seção legível no texto MCP), a consolidação (cadência de 20 enriquecimentos ou 24 h, decisões e ligações por par, nota derivada pelo `--summarizer-cmd` só com o gate de 0,85) e o instrumento da avaliação (`--memory-selection deterministic`, braços `broker-memory` e `broker-memory-deterministic`, sequências no corpus, custo da memória no relatório). A T2.0 (Choice no modelo pinado) rodou com a chave real. A T3.12, o texto enriquecido das observações (`memory-observation/v2`, PRD v0.4 §5.2, D-171), está implementada e sozinha não é entregue (D-172). A entrega vem da T3.13 (D-173, PRD v0.5): `context_before_finish` aceita `note`, uma ou duas frases do agente, guardadas como nota `host_supplied`; no cenário do roteiro ela teve 0,77 e foi entregue. Pendente: a T3.11, validar num Claude Code e num Codex reais que os hosts usam as memórias; os hooks não as trazem na v1 (não fazem HTTP e não há cache de decisões). A T5.3, a rodada da avaliação, teve as etapas 0 a 3 (D-182 a D-187): `--memory` **não é promovido** (o braço B não passa no gate de custo) e a rodada do Codex ficou inconclusiva; como continuar está [abaixo](#em-andamento-a-rodada-da-memória-t53-como-continuar). Fase 6 (fechamento) não começada; **experimental**. Para acompanhar ao vivo: `--memory-debug-log` (D-164), uma linha por evento em `debug.log` ao lado do store, escrita pelo servidor, pelos hooks e pelos comandos, para `tail -F`. A leitura faz o routing junto com o primeiro scoring e não pergunta se deve parar sem evidência (D-165): 1–2 requests, cabendo nos 850 ms. Num A/B da leitura com store sintético a seleção não mudou e a mediana caiu de 782 para 524 ms |
 
 O código não tem `TODO`/`FIXME`. As pendências moram no PRD (§19, §21, §23.17) e no
 [changelog de decisões](spec/changelog.md), que é a fonte da verdade sobre o porquê de cada coisa.
@@ -96,12 +99,17 @@ cargo lint                  # o clippy do job default (alias em .cargo/config.to
   lê o JSON do host, monta e ajusta a linha; o segundo é a projeção que os hooks publicam por sessão
   e workspace (`statusline/<hash>.json` no state-dir) e que o comando só lê. `src/hook.rs` publica,
   `src/install.rs` registra com `--statusline`.
+- **`AGENTS.md` e `CLAUDE.md`:** as instruções que o agente carrega ao abrir a sessão; o
+  `CLAUDE.md` só importa o `AGENTS.md`. `tests/agents_md.rs` confere tamanho, caminhos, seções
+  e comandos citados.
+- **`scripts/check.sh` e `.cargo/config.toml`:** o comando único dos checks de PR e os aliases
+  `cargo lint`/`lint-online` (D-194); `tests/check_script.rs` o testa com ferramentas falsas.
 - **`tests/`:** um arquivo por costura pública (`broker`, `mcp_surface`, `hooks`, `cli`, `statusline`,
   `notes`, `summarizer`, `worktree`, `upstream_ripwire`, `online*`, `memory_*`, `props*`, `eval`,
   `plugin`). As fixtures do ripwire e dos hosts são gravações reais.
 - **`spec/`:**
   - `ripwire-broker-mcp.md`: o PRD;
-  - `changelog.md`: D-001 a D-169, a tabela de índice no topo;
+  - `changelog.md`: todas as decisões (D-NNN), a tabela de índice no topo;
   - `plan/`: os planos de cada fase;
   - `diagrams/`: arquitetura, mantida à mão.
 - **`integrations/`:** configuração e skill para Claude Code e Codex.
@@ -167,12 +175,10 @@ está feita e `--memory` não é promovido (braço B: tokens 0,99 de A, o gate p
 
 ### Onde está o material
 
-Tudo fora do repositório, **num diretório temporário que o sistema pode apagar**. Copie o que
-quiser guardar antes de continuar:
-
-```
-/private/tmp/claude-501/-Users-aquental-projects-ai-ripwire-broker/40e3c0e8-af65-4312-b1fd-5cf8b2fa7689/scratchpad/t53/
-```
+Ficava fora do repositório, no scratchpad de uma sessão de 2026-10-11, e **não existe mais**:
+em 2026-11-14 o diretório tinha sido apagado e nenhuma cópia apareceu em `~/projects`. Se o
+mantenedor não guardou uma, a etapa 3 recomeça refazendo o corpus e o gerador; o resumo das
+etapas está no D-186 e no D-187. A tabela diz o que havia lá:
 
 | Caminho | O que é |
 |---|---|
@@ -184,7 +190,7 @@ quiser guardar antes de continuar:
 | `eval3/out` | etapa 2 (Claude Code), 286 linhas; `eval3/analysis-stage2.txt` é a análise |
 | `eval4/out` | etapa 3 (Codex), 60 linhas; `eval4/analysis.txt` |
 
-Nos comandos abaixo, `$T53` é esse diretório. O corpus guarda o caminho absoluto do clone em `repo`. Se o material mudar de lugar, gere o
+Nos comandos abaixo, `$T53` é o diretório do material refeito. O corpus guarda o caminho absoluto do clone em `repo`. Se o material mudar de lugar, gere o
 corpus de novo com `gen2.py` ou troque o caminho.
 
 ### O que fazer, em ordem
@@ -343,8 +349,8 @@ entrada no `spec/changelog.md` e atualiza a T5.3 em `spec/plan/jev-mem-plan.md`.
   braços; com a memória entregue a sessão gasta 27% menos tokens, mas ela chega em 7 de 25
   sessões com histórico relevante e a mediana do conjunto cai só 3% (gate: 10%). Em 8 leituras o
   classificador aceitou a nota e `add_memories` a tirou (`budget_omitted`): a estrutura enche os
-  2.500 tokens e a memória leva a sobra. Próximo passo: decidir como a memória entra no
-  orçamento, e só então a etapa 2.
+  2.500 tokens e a memória leva a sobra. Resolvido no D-184 (a memória entra no orçamento), e a
+  etapa 2 rodou no D-186.
 - **Etapa 0 da T5.3 (D-182): o instrumento encadeia sessões, e a primeira fumaça num repositório
   real não entregou a nota.** `ripwire-eval` ganhou `"continues": true`, o dreno do braço B entre
   sessões, `--shuffle`, `finish_notes` e `--memory-debug-log`. A fumaça no `ceci_app` achou e
@@ -434,8 +440,8 @@ Cada uma custou uma conclusão errada antes de ser achada. O changelog conta sei
   session_id, raiz)`; um JSON de teste sem ele nunca acha nada. Antes do D-163 isso aparecia como
   `hooks sem dados` e mandava investigar hooks que funcionavam; agora aparece `hooks sem sessão`.
   O `session_id` de uma sessão do Claude Code é o nome da pasta dela no scratchpad.
-- **O repositório saiu de `~/projects/ai/CECI/ripwire-broker` para `~/projects/ai/ripwire-broker`.**
-  O que guardava o caminho absoluto quebrou em silêncio: o `statusLine` do
+- **O repositório saiu de `~/projects/ai/CECI/ripwire-broker` para `~/projects/ai/ripwire-broker`,**
+  e hoje há um clone em cada caminho: conferir em qual a sessão está. O que guardava o caminho absoluto quebrou em silêncio: o `statusLine` do
   `.claude/settings.local.json` (a barra some, sem erro) e o registro do `cargo install`. O local agora
   usa `"${CLAUDE_PROJECT_DIR:-.}/.claude/statusline.sh"`, e o script não passa `--workspace` (a barra
   o lê do stdin). Os `--workspace` do `.claude/settings.json` e do `.mcp.json`, que o `install`
@@ -462,3 +468,7 @@ Cada uma custou uma conclusão errada antes de ser achada. O changelog conta sei
   (linha nova depois da última), o que vem antes dele é decrescente.
 - **Commits e PRs em inglês;** código e comentários também. Docs de `spec/` em português.
 - **Nada de dependência nova sem motivo:** o grafo do build padrão é uma promessa (CA-10).
+- **A sessão do agente roda com o login do mantenedor (D-192, risco aceito).** `git push` para o
+  `master`, tags, releases, `gh pr merge` e aprovações de environment são sempre do mantenedor,
+  mesmo que o comando funcione; o agente commita localmente. A lista completa do que pede um
+  humano é a seção "Ask before" do `AGENTS.md`.
