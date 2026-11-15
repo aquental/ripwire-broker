@@ -133,6 +133,7 @@
 | 2026-11-14 15:30 | Etapas 1, 2 e 4 do plano AI-native, em TDD: `AGENTS.md` na raiz (4,8 KB, em inglês) roteia o agente para o handoff, o changelog, o PRD e o `scripts/check.sh`; traz as cinco regras mais caras, a lista "Ask before" (seis efeitos, cada um com motivo e exemplos) e a seção "Credentials" do D-192. `CLAUDE.md` só importa o `AGENTS.md`. O `handoff.md` passa a um estado único, até este D; o README marca `memory forget --all` como irreversível. `tests/agents_md.rs` confere tamanho, caminhos, seções, comandos e categorias | [D-195](#d-195--o-agentsmd-roteia-o-agente-e-diz-o-que-pede-um-humano) |
 | 2026-11-14 16:00 | Etapa 3 do plano AI-native, parte de código, em TDD: job `secrets` no `rust.yml` (não obrigatório) com o gitleaks 8.30.1 fixado por versão e SHA-256, `fetch-depth: 0`; `scripts/check.sh secrets`, incluído no `all`, com as resoluções de merge (`--diff-merges=remerge`), recusando clone raso e falhando quando o gitleaks loga erro ou não varre nenhum commit (ele sai 0 nesses casos); a única exceção é uma impressão digital no `.gitleaksignore` (o stub de cabeçalho de chave de `tests/props_fs.rs`), porque a allowlist por regex da primeira versão escondia uma chave real ao lado do stub. O histórico inteiro passou; amostras sintéticas numa cópia local falharam o alvo, também depois de apagadas da árvore e quando só um merge as trazia. Ligar o secret scanning e o push protection fica com o mantenedor | [D-196](#d-196--o-gitleaks-varre-o-histórico-inteiro-em-toda-pr) |
 | 2026-11-14 18:00 | Etapa 5 do plano AI-native, parte de código, em TDD: o job `draft` do `release.yml` declara `environment: release`, então a aprovação vem depois dos portões e antes do rascunho, da compilação e da publicação; numa PR, o passo "Plugin surface" do job `default` (`scripts/plugin-surface.sh`) escreve um aviso no resumo quando a PR toca `integrations/claude-code/` ou `.claude-plugin/` e, quando o `checksums.txt` muda, exige as mesmas linhas do `SHA256SUMS` do release publicado da primeira linha. Conferido contra o release `v0.1.0` real. Criar e configurar o environment fica com o mantenedor | [D-197](#d-197--um-humano-aprova-antes-de-o-release-escrever-qualquer-coisa) |
+| 2026-11-14 19:00 | Etapa 7 do plano AI-native: `.github/pull_request_template.md` com o checklist tirado das convenções do handoff (teste vermelho antes, entrada D-NNN, nenhum crate novo no build padrão, `scripts/check.sh all` verde, fixtures sintéticas, a pergunta sobre o que o usuário do plugin executa) e uma seção livre do que foi verificado e como; as PRs do Dependabot não usam o template | [D-198](#d-198--toda-pr-abre-com-as-convenções-como-checklist) |
 | 2026-10-11 15:20 | Etapa 3 da T5.3 (Codex 0.161.0, `gpt-6.1-sol`): rodada de 60 sessões **inconclusiva**. 16 sessões morreram no limite de uso da conta e 9 foram invalidadas pelo guarda de contaminação; sobraram 35 válidas e 4 pares com histórico relevante (tokens B/A 0,94, IC 0,65 a 1,04). Dois achados do instrumento: o guarda marca `cat ~/.agents/skills/ripwire-*/SKILL.md` e `command -v graft` como ferramenta de contexto, e o Codex lê as skills do usuário mesmo com `--ignore-user-config` | [D-187](#d-187--etapa-3-da-t53-a-rodada-do-codex-parou-no-limite-de-uso) |
 | 2026-10-11 14:10 | Etapa 2 da T5.3: rodada completa no `ceci_app`, 13 sequências (30 sessões), braços A, B e C, 3 repetições, 270 sessões, US$ 94,24. Acerto na última sessão: A 34/37, B 37/37, C 32/34. Tokens com histórico relevante, mediana contra A: B 0,99 (IC 0,87 a 1,07), C 0,89 (IC 0,82 a 1,02). O braço B entregou a memória em 21 de 43 leituras (17 recusadas pelo classificador, 5 obsoletas); com entrega, 0,92. Latência de `context_for_task` sem piora. Cache quente: a leitura de memória não tem cache (B/A 6,9 na chamada repetida). Uma nota com muitas fontes passa da parte da memória e é cortada. **`--memory` não é promovido** | [D-186](#d-186--etapa-2-da-t53-o-braço-b-não-passa-no-gate-de-custo-o-classificador-recusa-metade-das-leituras) |
 | 2026-10-11 10:30 | O `ripwire-eval` passa a medir o Codex, em TDD: lê o transcript de `codex exec --json` com as mesmas contagens e os mesmos motivos de invalidez, e entrega o braço na linha de comando (`{codex_mcp}` vira os `-c mcp_servers.…` do braço). O registro de cada sessão ganha `memory_stop_reasons`, o `stop_reason` de cada leitura de memória | [D-185](#d-185--o-ripwire-eval-mede-o-codex-e-leva-o-stop_reason-da-leitura-ao-registro) |
@@ -9391,4 +9392,81 @@ release. Dois eram novos:
 
 Um terceiro, o push direto ao `master`, que pula o passo de PR, é risco conhecido: o `master` exige
 os checks, e a revisão obrigatória fica em aberto no plano até haver um segundo mantenedor.
+
+## D-198 — Toda PR abre com as convenções como checklist
+
+**Etapa 7 do [plano AI-native](plan/ai-native-plan.md),** na branch `ai-native/7-pr-template`,
+empilhada sobre a da etapa 5.
+
+**O que entra.** `.github/pull_request_template.md`, em inglês (convenção das PRs). Uma seção
+curta de "o quê e por quê", seis caixas e uma seção "Verified" em texto livre. As caixas vêm do
+`handoff.md` §"Convenções" e do plano:
+
+- teste vermelho antes, pela costura pública em `tests/`;
+- entrada D-NNN se houve decisão;
+- nenhum crate de rede no build padrão (CA-10), e o motivo de qualquer dependência nova;
+- `scripts/check.sh all` verde;
+- fixtures sintéticas;
+- se a PR mexe em `integrations/claude-code/` ou `.claude-plugin/`: o mantenedor foi consultado antes
+  (`AGENTS.md`, "Ask before") e a PR diz o que muda para quem usa o plugin.
+
+O que foi verificado, e como, fica em texto livre: "os testes passam" não é resposta, e uma caixa
+marcada não diria o quê.
+
+**As PRs do Dependabot não mudam.** O template não é aplicado pelo servidor: quem o usa para
+preencher o corpo é o cliente, a interface web e o `gh pr create` interativo (não com `--body` nem
+com `--fill`, que usa os commits). O Dependabot escreve o próprio corpo. A interface lê o template
+do branch padrão, então ele só aparece numa PR nova depois de chegar ao `master`.
+
+**Como é testado.** `tests/agents_md.rs` exige uma caixa para cada uma das seis convenções, pelas
+palavras que a caracterizam, e a seção "Verified". Sete mutantes, cada um removendo um item,
+morreram. Um sobreviveu à primeira versão do teste: a palavra "red" casava dentro de
+"c**red**ential", no item das fixtures. Agora o teste exige a expressão "red test".
+
+**Aceitação pendente:** abrir uma PR nova e ver o checklist. Abrir PR é do mantenedor.
+
+**Revisão adversarial** (Codex, Antigravity e o `rust-review`; o Grok rodava à parte). Nenhum
+defeito fora do teste e de duas frases. Cada mutante foi rodado de novo com um alvo de compilação
+próprio: o diretório compartilhado entre worktrees dava binários com o `CARGO_MANIFEST_DIR` de
+outra árvore e falsos sobreviventes. Válidos, em TDD:
+
+- **o item do CA-10 dizia "nenhum crate novo"**, que o CA-10 não diz (ele proíbe crate de rede no
+  build padrão; o `AGENTS.md` e o `check.sh` dizem isso), e se contradizia com "uma dependência
+  nova diz por quê". Agora: "No network crate in the default build (CA-10); any new dependency
+  says why";
+- **o teste contava caixas escondidas num comentário HTML**, que o GitHub não mostra. Agora ele lê
+  só o texto renderizado;
+- **o teste aceitava uma caixa só com todas as palavras**, e trocas que mudavam a obrigação:
+  "a red test exists", "was skipped", "a new crate is allowed", "need not be synthetic". Agora
+  são exatamente seis caixas, uma por convenção, cada uma com as palavras que carregam a obrigação
+  ("first", "green", "No network crate", "no credential", "change what plugin users run");
+- **o teste só lia a primeira linha de cada caixa**, e uma quebra de linha num template correto o
+  reprovava. Agora as linhas de continuação entram no item;
+- **"Verified" só conferia o título.** Apagar a orientação ou trocá-la por uma caixa passava. A
+  orientação agora é texto visível, e o teste exige que peça o que foi conferido e como, sem
+  caixa;
+- **os caminhos conferidos eram uma lista fixa no teste.** Agora vêm do próprio template, e o
+  ponteiro para §"Convenções" tem de achar o título no handoff;
+- **a frase sobre quando o GitHub aplica o template estava errada** (corrigida acima), e a linha de
+  status do plano dava a etapa 7 como feita sem dizer que a aceitação pede uma PR aberta.
+
+**Grok** (1.0.77, sobre o `68a8e6c`): seis achados, cinco válidos e um em parte. Quatro já estavam
+corrigidos na rodada acima: o CA-10, quando o GitHub aplica o template, as caixas em comentário e a
+caixa única, e o status do plano. Um agente que abre PR com `gh pr create --body` nunca vê o
+template, o que só reforça a seção "Verified" como texto livre. Válidos e novos, em TDD:
+
+- **uma caixa dentro de um bloco de código passava.** Ali ela é código, não caixa. O teste agora
+  ignora blocos cercados;
+- **os qualificadores podiam sumir sem o teste notar:** "(index row and section)", "(and a mutation
+  shows it bites)" e o "say what changes". Agora são exigidos;
+- **a origem do checklist e a caixa do plugin.** O checklist citava só §"Convenções", mas o comando
+  único, as fixtures e o plugin vêm das regras do `AGENTS.md`. A caixa do plugin era uma pergunta,
+  que numa PR sem plugin ficava parecendo pendente. Agora ela diz que, ao mexer no plugin, o
+  mantenedor foi consultado antes ("Ask before") e a PR diz o que muda. O topo manda marcar e
+  explicar uma caixa que não se aplica;
+- **a entrada D-NNN não dizia "em português"**, e a linha do handoff dava a etapa 7 como feita sem a
+  ressalva da aceitação.
+
+Recusado: o texto das fixtures é o do `AGENTS.md`, palavra por palavra. A tensão com "gravações
+reais" no handoff já existia antes deste patch.
 

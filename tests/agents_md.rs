@@ -593,3 +593,127 @@ fn a_plan_step_not_reported_done_has_no_checked_box() {
         }
     }
 }
+
+/// A Markdown text as GitHub renders it outside code: without `<!-- … -->` comments, and
+/// without fenced blocks, where a `- [ ]` line is code and not a checkbox.
+fn visible(doc: &str) -> String {
+    let mut out = String::new();
+    let mut rest = doc;
+    while let Some(start) = rest.find("<!--") {
+        out.push_str(&rest[..start]);
+        rest = rest[start..]
+            .split_once("-->")
+            .map_or("", |(_, after)| after);
+    }
+    out.push_str(rest);
+    let mut fenced = false;
+    out.lines()
+        .filter(|l| {
+            if l.trim_start().starts_with("```") {
+                fenced = !fenced;
+                return false;
+            }
+            !fenced
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// The `- [ ]` items of a text, each with its indented continuation lines, whitespace collapsed.
+fn checkboxes(doc: &str) -> Vec<String> {
+    let mut items: Vec<String> = Vec::new();
+    let mut open = false;
+    for line in doc.lines() {
+        if let Some(text) = line.trim_start().strip_prefix("- [ ] ") {
+            items.push(text.to_string());
+            open = true;
+        } else if open && line.starts_with(char::is_whitespace) && !line.trim().is_empty() {
+            let last = items.last_mut().expect("an open item");
+            last.push(' ');
+            last.push_str(line.trim());
+        } else {
+            open = false;
+        }
+    }
+    items
+        .into_iter()
+        .map(|i| i.split_whitespace().collect::<Vec<_>>().join(" "))
+        .collect()
+}
+
+#[test]
+fn a_new_pr_opens_with_the_conventions_as_a_checklist() {
+    // ai-native plan, step 7: the checklist comes from handoff.md §"Convenções". Each item is a
+    // checkbox a reviewer can see unticked, so only what GitHub renders counts.
+    let template = read(".github/pull_request_template.md");
+    let shown = visible(&template);
+    let items = checkboxes(&shown);
+    assert_eq!(items.len(), 6, "one box per convention: {items:#?}");
+    // Each convention in its own box, with the words that carry the obligation.
+    let conventions: [(&str, &[&str]); 6] = [
+        (
+            "a red test first",
+            &["red test", "first", "tests/", "mutation"],
+        ),
+        (
+            "a decision entry",
+            &[
+                "D-NNN",
+                "in Portuguese",
+                "spec/changelog.md",
+                "index row and section",
+            ],
+        ),
+        (
+            "no network crate in the default build",
+            &["No network crate", "CA-10"],
+        ),
+        (
+            "the one command, green",
+            &["`scripts/check.sh all`", "green"],
+        ),
+        (
+            "synthetic fixtures",
+            &["tests/fixtures/", "synthetic", "no credential"],
+        ),
+        (
+            "what plugin users run",
+            &[
+                "integrations/claude-code/",
+                ".claude-plugin/",
+                "asked first",
+                "Ask before",
+                "what changes for plugin users",
+            ],
+        ),
+    ];
+    let mut matched = BTreeSet::new();
+    for (what, words) in conventions {
+        let at = items
+            .iter()
+            .position(|i| words.iter().all(|w| i.contains(w)))
+            .unwrap_or_else(|| panic!("no box for {what} ({words:?}): {items:#?}"));
+        assert!(
+            matched.insert(at),
+            "{what} shares a box with another convention"
+        );
+    }
+    // What was verified and how: free text the reader sees, not a box to tick.
+    let verified = section(&shown, "Verified");
+    assert!(
+        verified.contains("checked") && verified.contains("how"),
+        "the Verified section does not ask what was checked and how: {verified:?}"
+    );
+    assert!(checkboxes(&verified).is_empty(), "{verified}");
+    // The paths and the section it names exist.
+    for path in code_spans(&shown).iter().filter(|s| is_repo_path(s)) {
+        assert!(Path::new(ROOT).join(path).exists(), "{path}");
+    }
+    // Where the list comes from: the conventions and the rules an agent loads.
+    assert!(shown.contains(r#"`handoff.md` §"Convenções""#), "{shown}");
+    assert!(shown.contains("`AGENTS.md`"), "{shown}");
+    assert!(
+        read("handoff.md").lines().any(|l| l == "## Convenções"),
+        "handoff.md has no Convenções section"
+    );
+}
